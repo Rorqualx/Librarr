@@ -4,7 +4,7 @@
   "name": "Readarr",
   "image": "mcr.microsoft.com/devcontainers/dotnet:1-6.0",
   "features": {
-    "ghcr.io/devcontainers/features/node:1": {
+    "ghcr.io/devcontainers/features/node:2": {
       "nodeGypDependencies": true,
       "version": "16",
       "nvmVersion": "latest"
