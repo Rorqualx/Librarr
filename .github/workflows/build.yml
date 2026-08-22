@@ -45,11 +45,11 @@ env:
   # rather than continuing the inherited Readarr 0.4.x numbering — the
   # metadata-source overhaul + UI wizard + the fork's CI/branding/CLA
   # changes are a different product even if the codebase is shared.
-  # GITHUB_RUN_NUMBER acts as the build counter (1.2.1-beta.N).
+  # GITHUB_RUN_NUMBER acts as the build counter (1.2.2-beta.N).
   # release.yml does NOT read this — it takes the version from the tag
   # name — so this line only sets what untagged dev builds call
   # themselves. Bump it when a release tag moves the line forward.
-  MAJOR_VERSION: '1.2.1-beta'
+  MAJOR_VERSION: '1.2.2-beta'
 
 jobs:
   variables:

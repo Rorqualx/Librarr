@@ -19,7 +19,7 @@ variables:
   # Phase 9: version reset to the Librarr 1.0.0-beta.x line. Kept in sync
   # with .github/workflows/build.yml — this Azure file is deprecated and
   # will be removed once GHA is fully verified on a public CI runner.
-  majorVersion: '1.2.1-beta'
+  majorVersion: '1.2.2-beta'
   minorVersion: $[counter('minorVersion', 1)]
   readarrVersion: '$(majorVersion).$(minorVersion)'
   buildName: '$(Build.SourceBranchName).$(readarrVersion)'

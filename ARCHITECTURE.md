@@ -7,8 +7,8 @@
 > **Snapshot:** describes Librarr at the `1.1.0-beta` release (`main`,
 > 2026-07-30). Version-, count- and pin-bearing lines were re-verified
 > against the tree on 2026-07-30; treat anything older as suspect. The
-> shipping-version references below were bumped for the `1.2.1-beta`
-> tag on 2026-08-03, but nothing else in this file was re-verified then
+> shipping-version references below were bumped for the `1.2.2-beta`
+> tag on 2026-08-22, but nothing else in this file was re-verified then
 > — the counts and citations still date from 2026-07-30. Inherits its codebase from upstream `Readarr/Readarr` at
 > `develop` HEAD `0b79d300` ("Retirement announcement", 2025-06-27); last
 > upstream tagged release was `v0.4.18.2805` (commit `7cc02f95`,
@@ -173,7 +173,7 @@ all of Open Library to that author's bibliography.
 
 ### CI / packaging
 
-- `azure-pipelines.yml:22` — `majorVersion: '1.2.1-beta'`.
+- `azure-pipelines.yml:22` — `majorVersion: '1.2.2-beta'`.
 - `distribution/docker/Dockerfile` — self-contained multi-stage build
   (Phase 9b). Compiles backend + frontend inside the image, runs on
   `aspnet:10.0-alpine`. Build command + run shape documented in
@@ -234,7 +234,7 @@ The architecture is **forked from Sonarr** and shows it in two visible ways:
 
    The ruleset was forked from Radarr without retitling.
 
-The product currently versions itself at `1.2.1-beta`
+The product currently versions itself at `1.2.2-beta`
 (`azure-pipelines.yml:22`). The `AssemblyVersion 10.0.0.*` in
 `Directory.Build.props:77` is the historical Readarr placeholder the CI
 overwrites at build time — not the shipping version, and not bumped
@@ -915,7 +915,7 @@ Setup → Build_Backend (Linux | Mac | Windows matrix)
 
 Notable variables (`azure-pipelines.yml:6-23`):
 
-- `majorVersion: '1.2.1-beta'` — the *real* shipping version
+- `majorVersion: '1.2.2-beta'` — the *real* shipping version
   (`azure-pipelines.yml:22`).
 - `minorVersion: $[counter('minorVersion', 1)]` — auto-incremented.
 - `dotnetVersion: '10.0.302'` — .NET 10 LTS (migrated 2026-07-30).

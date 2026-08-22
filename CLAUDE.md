@@ -8,7 +8,7 @@ Project memory for Claude sessions working in this repo.
 continuation of the archived Readarr (Servarr-family sibling of Sonarr,
 Radarr, Lidarr). Forked from Readarr at upstream `develop` HEAD
 `0b79d300` ("Retirement announcement", 2025-06-27). Currently at
-**`1.2.1-beta`** — engineering gate cleared, see
+**`1.2.2-beta`** — engineering gate cleared, see
 [`CHANGELOG.md`](CHANGELOG.md). The previous upstream tagged release was
 `v0.4.18.2805` (commit `7cc02f95`, 2025-06-10).
 
@@ -78,7 +78,7 @@ number that is wrong is worse than no number, because it gets trusted.
   FluentMigrator (`Servarr.FluentMigrator.Runner 3.3.2.9`; **48 migrations**,
   latest `047_root_folder_audiobook_quality_profile`), dual **SQLite +
   PostgreSQL**, NLog logging, **Sentry 4.0.2**. Shipping version
-  `1.2.1-beta` (`azure-pipelines.yml:22`). `Directory.Build.props:77`
+  `1.2.2-beta` (`azure-pipelines.yml:22`). `Directory.Build.props:77`
   `AssemblyVersion 10.0.0.*` is the historical Readarr placeholder the CI
   overwrites at build time; not the shipping version.
 
