@@ -375,7 +375,10 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                     return new List<Book>();
                 }
 
-                return new List<Book> { OpenLibraryEditionMapper.ToBook(resp.Resource) };
+                // The queried ISBN travels with the mapping: when the edition
+                // record lists no isbn_13 (or several isbn_10 printings), the
+                // mapper needs it to derive/select the right one — issue #10.
+                return new List<Book> { OpenLibraryEditionMapper.ToBook(resp.Resource, isbn) };
             });
 
             return WithAuthorNames(books);

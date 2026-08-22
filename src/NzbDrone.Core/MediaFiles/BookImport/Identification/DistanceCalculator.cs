@@ -82,16 +82,27 @@ namespace NzbDrone.Core.MediaFiles.BookImport.Identification
             dist.AddString("book", fileTitles, titleOptions);
             Logger.Trace("book: '{0}' vs '{1}'; {2}", fileTitles.ConcatToString("' or '"), titleOptions.ConcatToString("' or '"), dist.NormalizedDistance());
 
-            var isbn = localTracks.MostCommon(x => x.FileTrackInfo.Isbn);
-            if (isbn.IsNotNullOrWhiteSpace() && edition.Isbn13.IsNotNullOrWhiteSpace())
+            // Both sides are compared in ISBN-13 space. The file tag is
+            // whatever the ebook carried — StripIsbn keeps a valid ISBN-10 at
+            // ten digits — and the edition's Isbn13 may itself have been
+            // derived from an isbn_10 record (#10). Without converting the file
+            // side, an ISBN-10-tagged file would read as a full mismatch
+            // against the very edition it was looked up by: the 10.0-weight
+            // isbn bucket at distance 1 instead of the 0.1 isbn_missing bucket
+            // it used to fall into — a regression the ISBN-13 derivation would
+            // otherwise introduce for exactly the Calibre/older files it aims
+            // to help. (#13 review, Finding 1.)
+            var isbn = IsbnUtils.ToIsbn13(localTracks.MostCommon(x => x.FileTrackInfo.Isbn));
+            var editionIsbn = IsbnUtils.ToIsbn13(edition.Isbn13);
+            if (isbn.IsNotNullOrWhiteSpace() && editionIsbn.IsNotNullOrWhiteSpace())
             {
-                dist.AddBool("isbn", isbn != edition.Isbn13);
-                Logger.Trace("isbn: '{0}' vs '{1}'; {2}", isbn, edition.Isbn13, dist.NormalizedDistance());
+                dist.AddBool("isbn", isbn != editionIsbn);
+                Logger.Trace("isbn: '{0}' vs '{1}'; {2}", isbn, editionIsbn, dist.NormalizedDistance());
             }
-            else if (isbn.IsNullOrWhiteSpace() != edition.Isbn13.IsNullOrWhiteSpace())
+            else if (isbn.IsNullOrWhiteSpace() != editionIsbn.IsNullOrWhiteSpace())
             {
                 dist.AddBool("isbn_missing", true);
-                Logger.Trace("isbn: '{0}' vs '{1}'; {2}", isbn, edition.Isbn13, dist.NormalizedDistance());
+                Logger.Trace("isbn: '{0}' vs '{1}'; {2}", isbn, editionIsbn, dist.NormalizedDistance());
             }
 
             var asin = localTracks.MostCommon(x => x.FileTrackInfo.Asin);

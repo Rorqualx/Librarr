@@ -25,30 +25,29 @@ namespace NzbDrone.Core.Test.MetadataSource.OpenLibrary
     //      work-level docs and whichever ISBN happens to be listed first).
     //      See the review on PR #4.
     //
-    //      The *ISBN* does not always survive with it, which is the more
-    //      interesting half. ToEdition reads `isbn_13` only, and two of the five
-    //      captures — Dune and Sapiens — carry no `isbn_13` at all: OL answered
-    //      with an edition record listing `isbn_10` alone, in both cases the
+    //      The *ISBN* now survives too (issue #10). Two of the five captures —
+    //      Dune and Sapiens — carry no `isbn_13` at all: OL answered with an
+    //      edition record listing `isbn_10` alone, in both cases the
     //      checksum-equivalent of the ISBN-13 that was queried (0441172717 is
-    //      9780441172719; 0062316095 is 9780062316097). So Edition.Isbn13 is
-    //      null and the candidate reaches the matcher with no ISBN.
-    //
-    //      That is not cosmetic. DistanceCalculator:86-94 then takes the
-    //      `isbn_missing` branch (weight 0.1) instead of `isbn` at distance 0
-    //      (weight 10.0), and losing a 10.0-weight bucket from the denominator
-    //      is what lets the author penalty dominate. Measured through
-    //      ToBook -> ToCandidates' backfill -> BookDistance, holding the payload
-    //      fixed and varying only Isbn13:
+    //      9780441172719; 0062316095 is 9780062316097). ToEdition used to read
+    //      `isbn_13` only, so those candidates reached the matcher with no
+    //      ISBN — DistanceCalculator:86-94 took the `isbn_missing` branch
+    //      (weight 0.1) instead of `isbn` at distance 0 (weight 10.0), and
+    //      losing a 10.0-weight bucket from the denominator is what let the
+    //      author penalty dominate. Measured through ToBook -> ToCandidates'
+    //      backfill -> BookDistance, holding the payload fixed and varying
+    //      only Isbn13:
     //
     //        Foundation, authorless, isbn_13 present  0.1469   accept
     //        Foundation, authorless, isbn_13 cleared  0.2857   REJECT (gate 0.20)
     //        Foundation, named,      isbn_13 present  0.0047
     //        Foundation, named,      isbn_13 cleared  0.0179
     //
-    //      Harmless once the author name resolves; decisive when it does not.
-    //      The Isbn13-is-null expectations below therefore pin current
-    //      behaviour, not desired behaviour — deriving ISBN-13 from `isbn_10`
-    //      is a checksum, not a round trip.
+    //      ToEdition now derives the ISBN-13 from `isbn_10` when `isbn_13` is
+    //      absent, preferring the entry that matches the queried ISBN — Dune's
+    //      record lists two printings and only the second is the one that was
+    //      looked up. The expectations below assert the derived values; the
+    //      selection unit tests live in OpenLibraryEditionMapperFixture.
     //
     //   2. Where the edition JSON carries an author key, the candidate reaches
     //      the caller with a resolved author *name* (issue #7: an authorless
@@ -62,10 +61,11 @@ namespace NzbDrone.Core.Test.MetadataSource.OpenLibrary
     //      here with real payloads so a future work-level fallback has a
     //      test to flip.
     //
-    //      Sapiens is where (1) and (3) compound: no author key to resolve AND
-    //      no isbn_13, measured at 0.5082 against the 0.20 gate. The #7 fix
-    //      cannot reach it — there is no key to look a name up by — so it is
-    //      the ISBN half that would have to carry it.
+    //      Sapiens was where (1) and (3) compounded: no author key to resolve
+    //      AND no isbn_13, measured at 0.5082 against the 0.20 gate — the #7
+    //      fix cannot reach it, because there is no key to look a name up by.
+    //      With the ISBN half now carried by #10's derivation, it is back to
+    //      an ordinary authorless candidate (issue #9's remainder).
     //
     // The expectations are hardcoded rather than re-read from the JSON on
     // purpose: re-deriving them from the cassette would make the test a
@@ -127,21 +127,22 @@ namespace NzbDrone.Core.Test.MetadataSource.OpenLibrary
         }
 
         // ── the corpus, as captured ─────────────────────────────────
-        // fileName, queried ISBN, edition key, work key, Isbn13 as OL returned it
+        // fileName, queried ISBN, edition key, work key, expected Isbn13
         public static IEnumerable IdentityCases()
         {
             yield return new TestCaseData("isbn_1984_9780451524935.json", "9780451524935", "OL34854896M", "OL1168083W", "9780451524935").SetName("{m}(1984)");
 
             // Dune and Sapiens are the isbn_10-only captures: OL answered with
-            // an edition carrying no `isbn_13`, so ToEdition — which reads
-            // `isbn_13` alone — yields a null Isbn13 even though the queried
-            // ISBN is present in the payload as its ISBN-10 equivalent. The
-            // expected null is current behaviour, not desired behaviour; see
-            // the measured cost in the fixture header.
-            yield return new TestCaseData("isbn_dune_9780441172719.json", "9780441172719", "OL22597282M", "OL893415W", null).SetName("{m}(dune)");
+            // an edition carrying no `isbn_13`, so the expected Isbn13 is
+            // *derived* from `isbn_10` (issue #10) rather than read from the
+            // payload. Dune is the sharp case: its record lists two printings
+            // (0441172660, 0441172717) and only the second converts to the
+            // queried ISBN — a first-entry fallback would assert 9780441172665
+            // here and fail.
+            yield return new TestCaseData("isbn_dune_9780441172719.json", "9780441172719", "OL22597282M", "OL893415W", "9780441172719").SetName("{m}(dune)");
             yield return new TestCaseData("isbn_foundation_9780553293357.json", "9780553293357", "OL7825249M", "OL46125W", "9780553293357").SetName("{m}(foundation)");
             yield return new TestCaseData("isbn_hobbit_9780261103573.json", "9780261103573", "OL10236417M", "OL27513W", "9780261103573").SetName("{m}(fellowship)");
-            yield return new TestCaseData("isbn_sapiens_9780062316097.json", "9780062316097", "OL27000666M", "OL17075811W", null).SetName("{m}(sapiens)");
+            yield return new TestCaseData("isbn_sapiens_9780062316097.json", "9780062316097", "OL27000666M", "OL17075811W", "9780062316097").SetName("{m}(sapiens)");
         }
 
         [TestCaseSource(nameof(IdentityCases))]
