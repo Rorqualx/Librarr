@@ -7,6 +7,8 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.2.2-beta] — 2026-08-22
+
 ### Added
 
 - **Librarr now stops importing when Open Library stops answering.** Since
@@ -94,6 +96,30 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
   matched nothing. Aborting is no longer how you find that out, so it needs to
   be audible. A counter that gives up after N consecutive refusals is the
   fuller answer and is not done here.
+
+- **Editions carrying only an ISBN-10 now match on ISBN.** Diagnosed and
+  fixed by [@KevlarD-67](https://github.com/KevlarD-67) in
+  [#13](https://github.com/Rorqualx/Librarr/pull/13), continuing the
+  live-library ISBN work above. Open Library records many editions with an
+  `isbn_10` and no `isbn_13`. Those reached the import matcher with
+  `Edition.Isbn13` null, so identification took the `isbn_missing` branch
+  (weight `0.1`) instead of the `isbn` distance bucket (weight `10.0`) an
+  ISBN-bearing candidate is supposed to win on. The edition mapper now
+  derives the ISBN-13 an ISBN-10-only edition actually carries — the `978`
+  prefix, the first nine digits, and a recomputed mod-10 check digit.
+
+  The ISBN-10 is validated first and dropped when it fails, never converted
+  mechanically. A *bogus* derived ISBN-13 scores the full `1.0` distance at
+  weight `10.0` and is strictly worse than an absent one at `0.1`, so a
+  malformed source ISBN must forfeit the bucket rather than poison it.
+
+- **Books whose edition names no author now fall back to the work's author.**
+  [#14](https://github.com/Rorqualx/Librarr/pull/14). Some Open Library
+  editions carry no `authors` of their own and lean on the parent work for
+  them. The mapper read the author only from the edition, so those books
+  arrived authorless and scored maximum author-distance at the matcher — the
+  same failure mode as the nameless ISBN-candidate bug above, one level up.
+  The work's author is now used when the edition has none.
 
 ## [1.2.1-beta] — 2026-08-03
 
@@ -647,7 +673,8 @@ fork's code-level inventory.
 - Internal `Readarr.*` csproj rename / `NzbDrone.*` namespace
   rebrand (deliberately preserved).
 
-[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.1-beta...HEAD
+[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.2-beta...HEAD
+[1.2.2-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.1-beta...v1.2.2-beta
 [1.2.1-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.0-beta...v1.2.1-beta
 [1.2.0-beta]: https://github.com/Rorqualx/Librarr/compare/v1.1.0-beta...v1.2.0-beta
 [1.1.0-beta]: https://github.com/Rorqualx/Librarr/compare/v1.0.0-beta...v1.1.0-beta

@@ -1,6 +1,6 @@
 # Librarr roadmap
 
-Status as of the 1.2.1-beta line. Items are roughly ordered by
+Status as of the 1.2.2-beta line. Items are roughly ordered by
 priority; nothing here is a hard commitment.
 
 ## Open work at a glance
