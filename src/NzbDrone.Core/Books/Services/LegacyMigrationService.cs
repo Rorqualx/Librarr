@@ -23,15 +23,20 @@ namespace NzbDrone.Core.Books
     //   2. If no authors exist → fresh install, set marker, done.
     //   3. If every author's ForeignAuthorId is OL-shaped → already migrated,
     //      set marker, done.
-    //   4. If BookIdMapping already has rows (user ran reidentify by hand
-    //      pre-this-feature) → preserve their state, set marker, done.
-    //   5. Otherwise: flip every author whose MonitorNewItems == All to
-    //      None (preserves explicit New/None choices), then enqueue
-    //      ReidentifyLibraryCommand. Set marker when the command completes.
+    //   4. If BookIdMapping already has rows and this service never started
+    //      a run (user ran reidentify by hand pre-this-feature) → preserve
+    //      their state, set marker, done.
+    //   5. Otherwise: record that the migration has started, flip every
+    //      author whose MonitorNewItems == All to None (preserves explicit
+    //      New/None choices), then enqueue ReidentifyLibraryCommand. Set
+    //      marker when the command completes.
     //
-    // Failure of step 5 leaves the marker unset, so the migration retries
-    // on the next startup. The body runs on a background Task so we don't
-    // block the rest of ApplicationStartedEvent fan-out.
+    // Step 5 leaves the marker unset if the command fails, which it does
+    // when any lookup could not reach the metadata source, and if the app
+    // stops before the command finishes. Either way the next startup runs
+    // step 5 again; reidentify skips what is already mapped, so that
+    // resumes rather than restarts. The body runs on a background Task so
+    // we don't block the rest of ApplicationStartedEvent fan-out.
     public class LegacyMigrationService : IHandleAsync<ApplicationStartedEvent>, IHandle<CommandExecutedEvent>
     {
         public const int CurrentVersion = 1;
@@ -96,7 +101,7 @@ namespace NzbDrone.Core.Books
             _pendingCommandId = 0;
         }
 
-        private void RunMigration()
+        internal void RunMigration()
         {
             if (_configService.LegacyMigrationCompleted && _configService.LegacyMigrationVersion >= CurrentVersion)
             {
@@ -128,8 +133,10 @@ namespace NzbDrone.Core.Books
 
             // User ran reidentify by hand pre-this-feature. Don't touch their
             // MonitorNewItems state — they may have already fine-tuned it.
-            // Just set the marker so we stop checking.
-            if (_mappingRepo.All().Any())
+            // Just set the marker so we stop checking. Rows left behind by
+            // our own interrupted or failed run are not that case: there
+            // the migration is unfinished and must carry on below.
+            if (!_configService.LegacyMigrationStarted && _mappingRepo.All().Any())
             {
                 _logger.Info("LegacyMigrationService: BookIdMapping has rows ({0} legacy authors), assuming prior manual reidentify; marking complete without further action", legacyAuthors.Count);
                 _configService.LegacyMigrationCompleted = true;
@@ -137,29 +144,41 @@ namespace NzbDrone.Core.Books
                 return;
             }
 
-            _logger.Info("LegacyMigrationService: {0} legacy authors detected, beginning migration", legacyAuthors.Count);
-
-            var toFlip = legacyAuthors
-                .Where(a => a.MonitorNewItems == NewItemMonitorTypes.All)
-                .ToList();
-
-            if (toFlip.Count > 0)
+            if (_configService.LegacyMigrationStarted)
             {
-                foreach (var a in toFlip)
-                {
-                    // Use UpdateAuthor (not UpdateAuthors) so we don't trip
-                    // the AuthorPathBuilder side-effect in the bulk path —
-                    // a flip-monitor operation must not rewrite folder
-                    // paths even when the naming format has drifted.
-                    a.MonitorNewItems = NewItemMonitorTypes.None;
-                    _authorService.UpdateAuthor(a);
-                }
-
-                _logger.Info("LegacyMigrationService: flipped MonitorNewItems=All → None on {0} authors (preserves explicit New/None elsewhere)", toFlip.Count);
+                // The MonitorNewItems flip already ran in full before the
+                // flag was set. Repeating it here would undo anything the
+                // user has switched back to All since.
+                _logger.Info("LegacyMigrationService: {0} legacy authors detected, resuming unfinished migration", legacyAuthors.Count);
             }
             else
             {
-                _logger.Info("LegacyMigrationService: no authors with MonitorNewItems=All to flip");
+                _logger.Info("LegacyMigrationService: {0} legacy authors detected, beginning migration", legacyAuthors.Count);
+
+                var toFlip = legacyAuthors
+                    .Where(a => a.MonitorNewItems == NewItemMonitorTypes.All)
+                    .ToList();
+
+                if (toFlip.Count > 0)
+                {
+                    foreach (var a in toFlip)
+                    {
+                        // Use UpdateAuthor (not UpdateAuthors) so we don't trip
+                        // the AuthorPathBuilder side-effect in the bulk path —
+                        // a flip-monitor operation must not rewrite folder
+                        // paths even when the naming format has drifted.
+                        a.MonitorNewItems = NewItemMonitorTypes.None;
+                        _authorService.UpdateAuthor(a);
+                    }
+
+                    _logger.Info("LegacyMigrationService: flipped MonitorNewItems=All → None on {0} authors (preserves explicit New/None elsewhere)", toFlip.Count);
+                }
+                else
+                {
+                    _logger.Info("LegacyMigrationService: no authors with MonitorNewItems=All to flip");
+                }
+
+                _configService.LegacyMigrationStarted = true;
             }
 
             var queued = _commandQueue.Push(new ReidentifyLibraryCommand(), CommandPriority.High, CommandTrigger.Unspecified);

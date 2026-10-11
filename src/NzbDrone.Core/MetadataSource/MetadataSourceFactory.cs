@@ -33,7 +33,8 @@ namespace NzbDrone.Core.MetadataSource
           IProvideListInfo,
           ISearchForNewAuthor,
           ISearchForNewBook,
-          ISearchForNewEntity
+          ISearchForNewEntity,
+          IIdentifyUnmappedLegacyBooks
     {
         public const string BookInfoSource = "BookInfo";
         public const string OpenLibrarySource = "OpenLibrary";
@@ -142,6 +143,14 @@ namespace NzbDrone.Core.MetadataSource
 
             _logger.Debug("Translated GoodReads author {0} → OL {1} via BookIdMapping", foreignAuthorId, olKey);
             return olKey;
+        }
+
+        public bool IsUnmappedLegacyBook(string foreignBookId)
+        {
+            return IsOpenLibrary &&
+                   foreignBookId.IsNotNullOrWhiteSpace() &&
+                   !OpenLibraryIdHelper.IsWorkId(foreignBookId) &&
+                   TranslateBookToOpenLibrary(foreignBookId) == null;
         }
 
         private string TranslateBookToOpenLibrary(string foreignBookId)

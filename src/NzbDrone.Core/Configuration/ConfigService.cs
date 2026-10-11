@@ -298,6 +298,17 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("LegacyMigrationCompleted", value); }
         }
 
+        public bool LegacyMigrationStarted
+        {
+            // Set when LegacyMigrationService begins its own reidentify run.
+            // Tells a later startup that mapping rows already in the table
+            // are this migration's unfinished work, to be resumed, rather
+            // than the result of a reidentify the user ran by hand.
+            get { return GetValueBoolean("LegacyMigrationStarted", false); }
+
+            set { SetValue("LegacyMigrationStarted", value); }
+        }
+
         public int LegacyMigrationVersion
         {
             // Bumped to LegacyMigrationService.CurrentVersion on each
