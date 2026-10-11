@@ -363,7 +363,13 @@ namespace NzbDrone.Core.Books
                 return;
             }
 
-            var toMonitor = monitored.OrderByDescending(x => x.Id > 0 ? _mediaFileService.GetFilesByEdition(x.Id).Count : 0)
+            // PrepareExistingChild leaves a user-chosen edition monitored and
+            // also marks the source's pick, so both arrive here. The user's
+            // wins; the ordering below only settles everything else.
+            var chosenByUser = monitored.Where(x => x.Monitored && x.ManualAdd).ToList();
+            var candidates = chosenByUser.Any() ? chosenByUser : monitored;
+
+            var toMonitor = candidates.OrderByDescending(x => x.Id > 0 ? _mediaFileService.GetFilesByEdition(x.Id).Count : 0)
                 .ThenByDescending(x => x.Ratings.Popularity).First();
 
             monitored.ForEach(x => x.Monitored = false);
@@ -395,13 +401,14 @@ namespace NzbDrone.Core.Books
 
         // Wanted/missing only looks at the monitored edition, so a book whose
         // file sits on another edition would be reported missing and grabbed
-        // again. Leave the pick alone when it already has a file.
+        // again. Leave the pick alone when it already has a file, or when
+        // the user chose it: they picked that edition knowing what they have.
         private void MonitorEditionWithFiles(SortedChildren children, HashSet<int> editionsWithFiles)
         {
             var future = children.Future;
             var monitored = future.SingleOrDefault(x => x.Monitored);
 
-            if (monitored == null || editionsWithFiles.Contains(monitored.Id))
+            if (monitored == null || monitored.ManualAdd || editionsWithFiles.Contains(monitored.Id))
             {
                 return;
             }

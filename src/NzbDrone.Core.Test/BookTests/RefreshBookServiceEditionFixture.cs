@@ -24,12 +24,14 @@ namespace NzbDrone.Core.Test.BookTests
 
         private List<Edition> _updated;
         private List<Edition> _deleted;
+        private List<Edition> _upToDate;
 
         [SetUp]
         public void Setup()
         {
             _updated = null;
             _deleted = null;
+            _upToDate = null;
 
             var metadata = Builder<AuthorMetadata>.CreateNew().With(m => m.ForeignAuthorId = "OL1A").Build();
 
@@ -75,10 +77,11 @@ namespace NzbDrone.Core.Test.BookTests
                 {
                     _updated = update;
                     _deleted = delete;
+                    _upToDate = upToDate;
                 });
         }
 
-        private static Edition NewEdition(int id, string foreignId, bool monitored)
+        private static Edition NewEdition(int id, string foreignId, bool monitored, bool chosenByUser = false)
         {
             return Builder<Edition>.CreateNew()
                 .With(e => e.Id = id)
@@ -86,7 +89,7 @@ namespace NzbDrone.Core.Test.BookTests
                 .With(e => e.ForeignEditionId = foreignId)
                 .With(e => e.Title = "Title")
                 .With(e => e.Monitored = monitored)
-                .With(e => e.ManualAdd = false)
+                .With(e => e.ManualAdd = chosenByUser)
                 .Build();
         }
 
@@ -99,11 +102,11 @@ namespace NzbDrone.Core.Test.BookTests
             // database returns, must be separate instances.
             Mocker.GetMock<IEditionService>()
                 .Setup(s => s.GetEditionsForRefresh(It.IsAny<int>(), It.IsAny<List<string>>()))
-                .Returns(() => _stored.Select(e => NewEdition(e.Id, e.ForeignEditionId, e.Monitored)).ToList());
+                .Returns(() => _stored.Select(e => NewEdition(e.Id, e.ForeignEditionId, e.Monitored, e.ManualAdd)).ToList());
 
             Mocker.GetMock<IEditionService>()
                 .Setup(s => s.GetEditionsByBook(It.IsAny<int>()))
-                .Returns(() => _stored.Select(e => NewEdition(e.Id, e.ForeignEditionId, e.Monitored)).ToList());
+                .Returns(() => _stored.Select(e => NewEdition(e.Id, e.ForeignEditionId, e.Monitored, e.ManualAdd)).ToList());
 
             var remoteBook = Builder<Book>.CreateNew()
                 .With(b => b.ForeignBookId = WorkId)
@@ -179,6 +182,47 @@ namespace NzbDrone.Core.Test.BookTests
             Refresh();
 
             _deleted.Select(e => e.Id).Should().Equal(3);
+        }
+
+        private IEnumerable<int> MonitoredAfterRefresh()
+        {
+            return _updated.Concat(_upToDate).Where(e => e.Monitored).Select(e => e.Id);
+        }
+
+        [Test]
+        public void should_keep_the_edition_the_user_chose_over_the_sources_pick()
+        {
+            GivenEditions(new List<Edition> { NewEdition(1, "OL1M", false), NewEdition(2, "OL2M", true, chosenByUser: true) },
+                          new List<Edition> { NewEdition(0, "OL1M", true), NewEdition(0, "OL2M", false) });
+
+            Refresh();
+
+            MonitoredAfterRefresh().Should().Equal(2);
+        }
+
+        [Test]
+        public void should_keep_the_edition_the_user_chose_when_another_edition_has_the_file()
+        {
+            GivenEditions(new List<Edition> { NewEdition(1, "OL1M", false), NewEdition(2, "OL2M", true, chosenByUser: true) },
+                          new List<Edition> { NewEdition(0, "OL1M", true), NewEdition(0, "OL2M", false) });
+            GivenFileOnEdition(1);
+
+            Refresh();
+
+            MonitoredAfterRefresh().Should().Equal(2);
+        }
+
+        [Test]
+        public void should_follow_the_sources_pick_when_the_users_edition_is_no_longer_the_monitored_one()
+        {
+            // An import moved monitoring to edition 1; the old choice (2)
+            // is still marked as the user's but is not monitored any more.
+            GivenEditions(new List<Edition> { NewEdition(1, "OL1M", true), NewEdition(2, "OL2M", false, chosenByUser: true), NewEdition(3, "OL3M", false) },
+                          new List<Edition> { NewEdition(0, "OL1M", false), NewEdition(0, "OL2M", false), NewEdition(0, "OL3M", true) });
+
+            Refresh();
+
+            MonitoredAfterRefresh().Should().Equal(3);
         }
     }
 }

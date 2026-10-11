@@ -135,6 +135,7 @@ namespace NzbDrone.Core.Books
             newBook.Added = DateTime.UtcNow;
 
             newBook.Editions = tuple.Item2.Editions.Value;
+            var sourcePick = newBook.Editions.Value.FirstOrDefault(x => x.Monitored);
             newBook.Editions.Value.ForEach(x => x.Monitored = false);
 
             // Pick the previously-monitored edition by foreign id when
@@ -143,11 +144,13 @@ namespace NzbDrone.Core.Books
             // ForeignEditionId (no edition keys are exposed in the
             // search response), so the slim id never matches any of the
             // real M-keyed editions returned by GetBookInfo. Fall back
-            // to the first edition in that case — selecting a specific
-            // edition at search time isn't actually meaningful, the
-            // user is adding the work and at least one edition must be
-            // monitored to satisfy the data model.
+            // to the edition the mapper chose in that case — the user is
+            // adding the work, and AddBook marks this edition as theirs,
+            // so a refresh keeps it. Taking whichever edition the source
+            // happened to list first would lock in a translation or a
+            // coverless printing.
             var monitoredEdition = newBook.Editions.Value.FirstOrDefault(x => x.ForeignEditionId == editionId)
+                ?? sourcePick
                 ?? newBook.Editions.Value.FirstOrDefault();
             if (monitoredEdition != null)
             {
