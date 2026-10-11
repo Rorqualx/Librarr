@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NLog;
 using Readarr.Http.Extensions;
@@ -9,8 +10,12 @@ using Readarr.Http.Frontend.Mappers;
 
 namespace Readarr.Http.Frontend
 {
+    // [ApiController] makes the ASP.NET Core 10 cookie handler answer an
+    // unauthenticated request with 401 rather than a redirect to /login.
+    // These are pages a browser navigates to, so opt back in to the redirect.
     [Authorize(Policy="UI")]
     [ApiController]
+    [AllowCookieRedirect]
     public class StaticResourceController : Controller
     {
         private readonly IEnumerable<IMapHttpRequestsToDisk> _requestMappers;
