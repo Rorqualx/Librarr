@@ -377,10 +377,81 @@ namespace NzbDrone.Core.Books
             Debug.Assert(!children.Future.Any() || children.Future.Count(x => x.Monitored) == 1, "one edition monitored");
         }
 
+        // The remote edition list is capped (200 per work on OpenLibrary), so
+        // an edition can be missing from it and still exist. Deleting one
+        // that holds a file leaves the file pointing at nothing and the
+        // book showing as having none.
+        private void KeepEditionsWithFiles(SortedChildren children, HashSet<int> editionsWithFiles)
+        {
+            var keep = children.Deleted.Where(x => editionsWithFiles.Contains(x.Id)).ToList();
+
+            foreach (var edition in keep)
+            {
+                _logger.Debug("Keeping edition {0}: not in the metadata source's list but it has files", edition);
+                children.Deleted.Remove(edition);
+                children.UpToDate.Add(edition);
+            }
+        }
+
+        // Wanted/missing only looks at the monitored edition, so a book whose
+        // file sits on another edition would be reported missing and grabbed
+        // again. Leave the pick alone when it already has a file.
+        private void MonitorEditionWithFiles(SortedChildren children, HashSet<int> editionsWithFiles)
+        {
+            var future = children.Future;
+            var monitored = future.SingleOrDefault(x => x.Monitored);
+
+            if (monitored == null || editionsWithFiles.Contains(monitored.Id))
+            {
+                return;
+            }
+
+            var withFiles = future.FirstOrDefault(x => editionsWithFiles.Contains(x.Id));
+
+            if (withFiles == null)
+            {
+                return;
+            }
+
+            monitored.Monitored = false;
+            withFiles.Monitored = true;
+        }
+
+        // PrepareExistingChild and the two methods above change Monitored on
+        // editions that are otherwise up to date. Up-to-date editions are not
+        // written back, so without this the change is lost for some editions
+        // and saved for others, which can leave a book with no monitored
+        // edition at all.
+        private void SaveMonitoredChanges(SortedChildren children, int bookId)
+        {
+            if (bookId <= 0)
+            {
+                return;
+            }
+
+            var stored = _editionService.GetEditionsByBook(bookId).ToDictionary(x => x.Id, x => x.Monitored);
+
+            var changed = children.UpToDate
+                .Where(x => stored.TryGetValue(x.Id, out var wasMonitored) && wasMonitored != x.Monitored)
+                .ToList();
+
+            children.UpToDate = children.UpToDate.Except(changed).ToList();
+            children.Updated.AddRange(changed);
+        }
+
         protected override bool RefreshChildren(SortedChildren localChildren, List<Edition> remoteChildren, Author remoteData, bool forceChildRefresh, bool forceUpdateFileTags, DateTime? lastUpdate)
         {
+            var bookId = localChildren.All.Select(x => x.BookId).FirstOrDefault(x => x > 0);
+            var editionsWithFiles = bookId > 0
+                ? _mediaFileService.GetFilesByBook(bookId).Select(x => x.EditionId).ToHashSet()
+                : new HashSet<int>();
+
+            KeepEditionsWithFiles(localChildren, editionsWithFiles);
+
             // make sure only one of the releases ends up monitored
             MonitorSingleEdition(localChildren);
+            MonitorEditionWithFiles(localChildren, editionsWithFiles);
+            SaveMonitoredChanges(localChildren, bookId);
 
             localChildren.All.ForEach(x => _logger.Trace($"release: {x} monitored: {x.Monitored}"));
 
