@@ -90,10 +90,12 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
 
         public HashSet<string> GetChangedAuthors(DateTime startTime)
         {
-            // OL has no changed-since API. The per-author refresh schedule
-            // covers freshness. Suppress the delta-refresh path.
-            _logger.Debug("OL GetChangedAuthors called (startTime={0}); OL has no delta API, returning empty.", startTime);
-            return new HashSet<string>();
+            // OL has no changed-since API. Null tells RefreshAuthorService
+            // there is no change feed, so it falls back to refreshing the
+            // authors that are due. An empty set would mean "nothing
+            // changed" and skip every author on every scheduled run.
+            _logger.Debug("OL GetChangedAuthors called (startTime={0}); OL has no delta API, returning null.", startTime);
+            return null;
         }
 
         public Tuple<string, Book, List<AuthorMetadata>> GetBookInfo(string id)
