@@ -116,9 +116,21 @@ namespace NzbDrone.Core.Test.MetadataSource
 
             Mocker.GetMock<IHttpClient>()
                 .Setup(c => c.Get<OpenLibraryAuthorWorksResource>(It.IsAny<HttpRequest>()))
-                .Returns<HttpRequest>(req => Cassette<OpenLibraryAuthorWorksResource>(req, "author_tolkien_works.json"));
+                .Returns<HttpRequest>(req => SinglePage(Cassette<OpenLibraryAuthorWorksResource>(req, "author_tolkien_works.json")));
 
             return requested;
+        }
+
+        // The cassette is the first page of a longer list and says so. This
+        // mock answers every request with it, so drop the pointer to the next
+        // page or the proxy would follow it back to the same page until its
+        // page limit.
+        private static HttpResponse<OpenLibraryAuthorWorksResource> SinglePage(HttpResponse<OpenLibraryAuthorWorksResource> response)
+        {
+            response.Resource.Links = null;
+            response.Resource.Size = response.Resource.Entries.Count;
+
+            return response;
         }
 
         private static HttpResponse<T> Cassette<T>(HttpRequest req, string name)
