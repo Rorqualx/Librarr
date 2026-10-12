@@ -26,6 +26,10 @@ namespace Readarr.Http.Frontend.Mappers
             _caseSensitive = RuntimeInfo.IsProduction ? DiskProviderBase.PathStringComparison : StringComparison.OrdinalIgnoreCase;
         }
 
+        // The only folder this mapper may serve files from. Abstract so that a
+        // new mapper cannot be written without declaring one.
+        protected abstract string RootFolder { get; }
+
         public abstract string Map(string resourceUrl);
 
         public abstract bool CanHandle(string resourceUrl);
@@ -33,6 +37,15 @@ namespace Readarr.Http.Frontend.Mappers
         public IActionResult GetResponse(string resourceUrl)
         {
             var filePath = Map(resourceUrl);
+
+            // Answered exactly like a missing file, so the response says nothing
+            // about what does or does not exist outside the folder.
+            if (!IsInsideRootFolder(filePath))
+            {
+                _logger.Warn("Refusing to serve {0}, it is outside of {1}", resourceUrl, RootFolder);
+
+                return null;
+            }
 
             if (_diskProvider.FileExists(filePath, _caseSensitive))
             {
@@ -50,6 +63,11 @@ namespace Readarr.Http.Frontend.Mappers
             _logger.Warn("File {0} not found", filePath);
 
             return null;
+        }
+
+        protected bool IsInsideRootFolder(string filePath)
+        {
+            return PathContainment.IsInside(RootFolder, filePath, _caseSensitive);
         }
 
         protected virtual Stream GetContentStream(string filePath)

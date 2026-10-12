@@ -6,6 +6,7 @@ using ICSharpCode.SharpZipLib.GZip;
 using ICSharpCode.SharpZipLib.Tar;
 using ICSharpCode.SharpZipLib.Zip;
 using NLog;
+using NzbDrone.Common.Disk;
 
 namespace NzbDrone.Common
 {
@@ -69,6 +70,16 @@ namespace NzbDrone.Common
                     throw new IOException(string.Format("File {0} failed archive validation.", compressedFile));
                 }
 
+                // Check every entry before writing any, so an archive that is
+                // refused leaves nothing behind.
+                foreach (ZipEntry zipEntry in zipFile)
+                {
+                    if (zipEntry.IsFile)
+                    {
+                        EnsureInsideDestination(compressedFile, destination, zipEntry.Name);
+                    }
+                }
+
                 foreach (ZipEntry zipEntry in zipFile)
                 {
                     if (!zipEntry.IsFile)
@@ -105,6 +116,24 @@ namespace NzbDrone.Common
 
         private void ExtractTgz(string compressedFile, string destination)
         {
+            // SharpZipLib refuses entries that climb out of the destination, but
+            // it compares path prefixes without a trailing separator, so a sibling
+            // folder whose name starts with the destination's still gets through,
+            // and entries ahead of a refused one have already been written.
+            // Check every entry up front instead.
+            using (var listStream = new TarInputStream(new GZipInputStream(File.OpenRead(compressedFile)), null))
+            {
+                TarEntry tarEntry;
+
+                while ((tarEntry = listStream.GetNextEntry()) != null)
+                {
+                    if (!tarEntry.IsDirectory)
+                    {
+                        EnsureInsideDestination(compressedFile, destination, tarEntry.Name);
+                    }
+                }
+            }
+
             Stream inStream = File.OpenRead(compressedFile);
             Stream gzipStream = new GZipInputStream(inStream);
 
@@ -114,6 +143,14 @@ namespace NzbDrone.Common
 
             gzipStream.Close();
             inStream.Close();
+        }
+
+        private static void EnsureInsideDestination(string compressedFile, string destination, string entryName)
+        {
+            if (!PathContainment.IsInside(destination, Path.Combine(destination, entryName)))
+            {
+                throw new IOException(string.Format("File {0} contains entry '{1}' which is outside of the extraction folder.", compressedFile, entryName));
+            }
         }
 
         private void OnZipError(TestStatus status, string message)
