@@ -74,6 +74,18 @@ namespace NzbDrone.Windows.Disk
                 var directoryInfo = new DirectoryInfo(filename);
                 var directorySecurity = directoryInfo.GetAccessControl(AccessControlSections.Access);
 
+                // A folder whose ACL has had inheritance switched off was locked
+                // down on purpose -- the Windows installer does exactly that to
+                // %ProgramData%\Librarr, which holds config.xml (the API key) and
+                // the database. Re-adding Everyone:Modify here on every start
+                // would undo it the first time the app ran elevated. The default
+                // (inheriting) folder a portable install creates is unaffected.
+                if (directorySecurity.AreAccessRulesProtected)
+                {
+                    Logger.Debug("{0} has a protected ACL, leaving its permissions alone", filename);
+                    return;
+                }
+
                 var rules = directorySecurity.GetAccessRules(true, false, typeof(SecurityIdentifier));
 
                 if (rules.OfType<FileSystemAccessRule>().Any(acl => acl.AccessControlType == controlType && (acl.FileSystemRights & rights) == rights && acl.IdentityReference.Equals(sid)))

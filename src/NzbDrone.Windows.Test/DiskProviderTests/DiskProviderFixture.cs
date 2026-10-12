@@ -1,6 +1,8 @@
 ﻿using System.IO;
+using System.Linq;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Common.Test.DiskTests;
 using NzbDrone.Windows.Disk;
@@ -14,6 +16,46 @@ namespace NzbDrone.Windows.Test.DiskProviderTests
         public DiskProviderFixture()
         {
             WindowsOnly();
+        }
+
+        private static bool HasExplicitEveryoneRule(string path)
+        {
+            var everyone = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
+
+            return new DirectoryInfo(path)
+                .GetAccessControl(AccessControlSections.Access)
+                .GetAccessRules(true, false, typeof(SecurityIdentifier))
+                .OfType<FileSystemAccessRule>()
+                .Any(r => r.IdentityReference.Equals(everyone));
+        }
+
+        [Test]
+        public void SetEveryonePermissions_should_grant_everyone_on_an_inheriting_folder()
+        {
+            var folder = GetTempFilePath();
+            Directory.CreateDirectory(folder);
+
+            Subject.SetEveryonePermissions(folder);
+
+            HasExplicitEveryoneRule(folder).Should().BeTrue();
+        }
+
+        [Test]
+        public void SetEveryonePermissions_should_leave_a_protected_acl_alone()
+        {
+            var folder = GetTempFilePath();
+            Directory.CreateDirectory(folder);
+
+            // What the installer does to the data folder: inheritance off,
+            // existing entries kept as explicit ones.
+            var directory = new DirectoryInfo(folder);
+            var security = directory.GetAccessControl(AccessControlSections.Access);
+            security.SetAccessRuleProtection(true, true);
+            directory.SetAccessControl(security);
+
+            Subject.SetEveryonePermissions(folder);
+
+            HasExplicitEveryoneRule(folder).Should().BeFalse();
         }
 
         protected override void SetWritePermissions(string path, bool writable)

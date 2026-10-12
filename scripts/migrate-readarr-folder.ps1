@@ -28,8 +28,8 @@
 
 .NOTES
     Requires PowerShell 5.1+ (built into Windows 10/11). Run from an
-    elevated prompt if your data folder lives under %ProgramData% — the
-    Readarr installer's default — otherwise non-admin shells can't read
+    elevated prompt if your data folder lives under %ProgramData% -- the
+    Readarr installer's default -- otherwise non-admin shells can't read
     or write there.
 #>
 
@@ -47,7 +47,7 @@ Write-Host "Source:      $Src"
 Write-Host "Destination: $Dst"
 Write-Host
 
-# ── Pre-flight ──────────────────────────────────────────────────────────
+# -- Pre-flight ----------------------------------------------------------
 if (-not (Test-Path -LiteralPath $Src -PathType Container)) {
     Write-Error "Source folder '$Src' does not exist. Pass -Src if your data folder is elsewhere."
     exit 1
@@ -72,7 +72,7 @@ if (-not $Force) {
     }
 }
 
-# ── Confirmation ────────────────────────────────────────────────────────
+# -- Confirmation --------------------------------------------------------
 if (-not $Force -and -not $DryRun) {
     Write-Host "About to copy '$Src' to '$Dst' (Readarr folder untouched)."
     $reply = Read-Host 'Continue? [y/N]'
@@ -82,7 +82,7 @@ if (-not $Force -and -not $DryRun) {
     }
 }
 
-# ── Copy ────────────────────────────────────────────────────────────────
+# -- Copy ----------------------------------------------------------------
 if ($DryRun) {
     Write-Host "[dry-run] would: Copy-Item -Recurse '$Src\*' -Destination '$Dst'"
     Write-Host '[dry-run] no files copied.'
@@ -90,18 +90,19 @@ if ($DryRun) {
 }
 
 New-Item -ItemType Directory -Path $Dst -Force | Out-Null
-Copy-Item -LiteralPath $Src -Destination $Dst -Recurse -Force
 
-# Copy-Item with -Recurse on a folder source creates $Dst\<basename>.
-# We want the contents directly inside $Dst, so unwrap the inner folder.
-$leaf = Split-Path -Leaf $Src
-$inner = Join-Path $Dst $leaf
-if (Test-Path -LiteralPath $inner -PathType Container) {
-    Get-ChildItem -LiteralPath $inner -Force | Move-Item -Destination $Dst -Force
-    Remove-Item -LiteralPath $inner -Force
+# Copy the children of $Src, not $Src itself. Handing Copy-Item the folder
+# when $Dst already exists produces $Dst\<leaf of $Src>, which then has to be
+# unwrapped by moving its contents up a level -- a second pass that can stop
+# half way (for instance when the data folder contains an entry with its own
+# name). Copying the children needs no second pass. -Force on Get-ChildItem
+# so hidden and system entries come along too. Exercised by the "Windows
+# smoke" CI job (tests/e2e/windows-smoke.ps1, stage "migrate").
+Get-ChildItem -LiteralPath $Src -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $Dst -Recurse -Force
 }
 
-# ── Sanity-check ────────────────────────────────────────────────────────
+# -- Sanity-check --------------------------------------------------------
 $srcSize = (Get-ChildItem -LiteralPath $Src -Recurse -Force -ErrorAction SilentlyContinue |
             Measure-Object -Property Length -Sum).Sum
 $dstSize = (Get-ChildItem -LiteralPath $Dst -Recurse -Force -ErrorAction SilentlyContinue |
@@ -119,10 +120,10 @@ if ($srcSize -and $dstSize) {
 Write-Host @"
 
 Done. Next steps:
-  1. Start Librarr — it picks up the copy at '$Dst' on first launch.
+  1. Start Librarr -- it picks up the copy at '$Dst' on first launch.
   2. Verify the library, indexers, and download clients look right.
-  3. Run Settings → Metadata → Switch Metadata Source.
-  4. Once you're satisfied, you can delete '$Src' — but the Readarr
+  3. Run Settings -> Metadata -> Switch Metadata Source.
+  4. Once you're satisfied, you can delete '$Src' -- but the Readarr
      folder is your rollback parachute, so consider keeping it for a
      few days.
 

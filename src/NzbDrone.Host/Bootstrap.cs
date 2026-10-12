@@ -218,7 +218,20 @@ namespace NzbDrone.Host
 
             Logger.Debug("Getting windows service status");
 
-            // IsWindowsService can throw sometimes, so wrap it
+            // IsWindowsService decides by looking up the parent process and asking
+            // whether it is named "services". The lookup itself swallows its
+            // errors (a parent that has already exited simply yields false --
+            // the Windows smoke job starts the app orphaned to prove it), but
+            // reading ProcessName off the Process it returns does not: if the
+            // parent exits between the two calls that is InvalidOperationException.
+            //
+            // Microsoft.Extensions.Hosting.WindowsServices 10.x computes the result
+            // in a static initialiser (6.x through 8.x did it per call, and 6.x
+            // also read SessionId), so what arrives here is now a
+            // TypeInitializationException wrapping it, and it is thrown again on
+            // every later call in the process. Catching it and running
+            // interactively is the right outcome: a real service's parent is
+            // services.exe, which does not exit.
             var isWindowsService = false;
             try
             {
