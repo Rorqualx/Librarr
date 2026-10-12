@@ -72,7 +72,7 @@ namespace Readarr.Api.V1.System.Backup
         }
 
         [HttpPost("restore/{id:int}")]
-        public object Restore([FromQuery] int id)
+        public object Restore([FromRoute] int id)
         {
             var backup = GetBackup(id);
 

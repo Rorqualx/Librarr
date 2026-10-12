@@ -73,7 +73,7 @@ namespace Readarr.Api.V1.Profiles.Delay
         }
 
         [HttpPut("reorder/{id:int}")]
-        public object Reorder([FromQuery] int id, [FromQuery] int? afterId = null)
+        public object Reorder([FromRoute] int id, [FromQuery(Name = "after")] int? afterId = null)
         {
             ValidateId(id);
 

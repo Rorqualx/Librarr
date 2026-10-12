@@ -233,7 +233,7 @@ namespace Readarr.Api.V1
         [HttpPost("action/{name}")]
         [Consumes("application/json")]
         [Produces("application/json")]
-        public IActionResult RequestAction([FromQuery] string name, [FromBody] TProviderResource resource)
+        public IActionResult RequestAction([FromRoute] string name, [FromBody] TProviderResource resource)
         {
             var providerDefinition = GetDefinition(resource, false, false, false);
 

@@ -21,7 +21,7 @@ namespace Readarr.Api.V1.Queue
         }
 
         [HttpPost("grab/{id:int}")]
-        public async Task<object> Grab([FromQuery] int id)
+        public async Task<object> Grab([FromRoute] int id)
         {
             var pendingRelease = _pendingReleaseService.FindPendingQueueItem(id);
 
