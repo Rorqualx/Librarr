@@ -357,13 +357,34 @@ jobs:
         shell: bash
         run: bash tests/e2e/postgres-boot.sh
 
+      - name: Check every migration in the tree was applied by the app
+        # /system/status cannot answer this. It reports the highest applied
+        # version, and that is pinned at 158 by an inherited misnumbering
+        # (034_cdh_per_downloadclient.cs is [Migration(158)]), so it reads the
+        # same whether or not the newest migrations ran. Compare the whole
+        # list instead, in the main and the log database.
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(sed -n 's/.*\[Migration(0*\([0-9][0-9]*\))\].*/\1/p' \
+            src/NzbDrone.Core/Datastore/Migration/[0-9]*_*.cs | sort -n | grep -vx 0)
+          echo "Migrations in the tree: $(wc -l <<<"$expected")"
+          for db in readarr-main readarr-log; do
+            applied=$(docker exec "${{ job.services.postgres.id }}" \
+              psql -U readarr -d "$db" -v ON_ERROR_STOP=1 -Atc 'select "Version" from "VersionInfo" order by 1' | grep -vx 0)
+            echo "Applied in $db: $(wc -l <<<"$applied")"
+            diff <(echo "$expected") <(echo "$applied")
+          done
+
       - name: Dump the migrated schema of the fork's tables
         if: always()
         shell: bash
         run: |
           docker exec "${{ job.services.postgres.id }}" \
-            psql -U readarr -d readarr-main -c '\d "BookIdMapping"' -c '\d "Narrators"' -c '\d "EditionNarrators"' \
-            -c 'select max("Version") from "VersionInfo"' || true
+            psql -U readarr -d readarr-main -c '\d "BookIdMapping"' -c '\d "Narrators"' -c '\d "EditionNarrators"' || true
+          docker exec "${{ job.services.postgres.id }}" \
+            psql -U readarr -d readarr-log -c '\d "UpdateHistory"' || true
 
       - name: Upload PostgreSQL test results
         if: always()

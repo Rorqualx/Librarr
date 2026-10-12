@@ -25,11 +25,18 @@ HOST="http://localhost:${LIBRARR_PORT}"
 DATA="$(mktemp -d -t librarr-postgres.XXXXXX)"
 LOG="${DATA}/console.log"
 
-# The newest migration in the tree is what a fully migrated database must
-# report. Derived rather than hard-coded so adding a migration cannot leave
-# this check asserting a stale number.
-EXPECTED_MIGRATION=$(find src/NzbDrone.Core/Datastore/Migration -maxdepth 1 -name '[0-9]*_*.cs' \
-  | sed -n 's|.*/0*\([0-9][0-9]*\)_.*|\1|p' | sort -n | tail -1)
+# The highest migration version in the tree is what a fully migrated database
+# must report. Derived rather than hard-coded so adding a migration cannot
+# leave this check asserting a stale number.
+#
+# Read from the [Migration(N)] attributes, not the file names: the two
+# disagree. 034_cdh_per_downloadclient.cs is declared [Migration(158)]
+# (inherited from upstream), so the app reports 158 and will go on doing so
+# until a migration is numbered above that. This check therefore cannot tell
+# whether the newest migrations ran; the workflow compares the full list of
+# applied versions against the tree for that.
+EXPECTED_MIGRATION=$(sed -n 's/.*\[Migration(0*\([0-9][0-9]*\))\].*/\1/p' \
+  src/NzbDrone.Core/Datastore/Migration/[0-9]*_*.cs | sort -n | tail -1)
 [[ -n "${EXPECTED_MIGRATION}" ]] || { echo "could not determine the latest migration number" >&2; exit 1; }
 
 echo "Data dir: ${DATA}; expecting migration ${EXPECTED_MIGRATION}"
