@@ -109,6 +109,18 @@ namespace NzbDrone.Console
                         Environment.Exit((int)exitCode);
                     }
 
+                    // A Windows service has no user to intervene. Waiting here
+                    // kept the process alive for an hour after a failed startup,
+                    // and since the service had already reported itself started,
+                    // the Service Control Manager showed RUNNING for something
+                    // that was serving nothing. Exit, so the failure is visible.
+                    if (OsInfo.IsWindows && !Environment.UserInteractive)
+                    {
+                        System.Console.WriteLine("Non-recoverable failure in a non-interactive session, exiting");
+
+                        Environment.Exit((int)exitCode);
+                    }
+
                     System.Console.WriteLine("Non-recoverable failure, waiting for user intervention...");
                     for (var i = 0; i < 3600; i++)
                     {

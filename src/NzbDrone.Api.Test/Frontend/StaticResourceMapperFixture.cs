@@ -86,6 +86,26 @@ namespace NzbDrone.Api.Test.Frontend
             ExceptionVerification.ExpectedWarns(1);
         }
 
+        // The two log mappers keep only the file name of the request. Where
+        // backslash is a separator (Windows) that already strips the "..\"
+        // segments, so the request lands on a file of that name inside the
+        // folder and is safe. Everywhere else the backslashes survive as
+        // part of the name and the containment check refuses the request.
+        private void ShouldRefuseOrStayInside<TMapper>(string resourceUrl, string folder)
+            where TMapper : StaticResourceMapperBase
+        {
+            if (OsInfo.IsWindows)
+            {
+                var mapped = Mocker.Resolve<TMapper>().Map(resourceUrl);
+
+                Path.GetDirectoryName(Path.GetFullPath(mapped)).Should().Be(folder);
+            }
+            else
+            {
+                ShouldRefuse<TMapper>(resourceUrl);
+            }
+        }
+
         [Test]
         public void static_resource_mapper_should_serve_file_inside_ui_folder()
         {
@@ -176,16 +196,16 @@ namespace NzbDrone.Api.Test.Frontend
 
         [TestCase(@"/logfile/..\config.xml")]
         [TestCase(@"/logfile/..\..\secret.txt")]
-        public void log_file_mapper_should_refuse_backslash_path_outside_log_folder(string resourceUrl)
+        public void log_file_mapper_should_not_reach_outside_log_folder_with_backslashes(string resourceUrl)
         {
-            ShouldRefuse<LogFileMapper>(resourceUrl);
+            ShouldRefuseOrStayInside<LogFileMapper>(resourceUrl, Path.Combine(_appDataFolder, "logs"));
         }
 
         [TestCase(@"/updatelogfile/..\config.xml")]
         [TestCase(@"/updatelogfile/..\..\secret.txt")]
-        public void update_log_file_mapper_should_refuse_backslash_path_outside_log_folder(string resourceUrl)
+        public void update_log_file_mapper_should_not_reach_outside_log_folder_with_backslashes(string resourceUrl)
         {
-            ShouldRefuse<UpdateLogFileMapper>(resourceUrl);
+            ShouldRefuseOrStayInside<UpdateLogFileMapper>(resourceUrl, Path.Combine(_appDataFolder, "UpdateLogs"));
         }
 
         [Test]

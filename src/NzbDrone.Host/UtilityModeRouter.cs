@@ -52,6 +52,21 @@ namespace NzbDrone.Host
                         else
                         {
                             _remoteAccessAdapter.MakeAccessible(true);
+
+                            // By now this process, which is elevated, has created the
+                            // data folder: the log file is in it, and so is config.xml,
+                            // written when the firewall adapter above asked for the port.
+                            // Both are owned by an administrator, and the service runs as
+                            // LocalService, which %ProgramData%'s default ACL lets create
+                            // files but not change somebody else's. A service installed
+                            // this way on a machine with no data folder yet reported
+                            // RUNNING and never listened -- found by the Windows smoke
+                            // job. Opening the folder up here is what /registerurl already
+                            // does, and what the service itself would do on a folder it
+                            // had created; a folder with a protected ACL (the installer's)
+                            // is left as it is.
+                            _appFolderFactory.SetPermissions();
+
                             _serviceProvider.Install(ServiceProvider.SERVICE_NAME);
                             _serviceProvider.SetPermissions(ServiceProvider.SERVICE_NAME);
 

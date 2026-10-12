@@ -2,7 +2,11 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFrameworks>net10.0</TargetFrameworks>
+    <!-- app.manifest asks for requireAdministrator. Nothing referenced it, so
+         it was never embedded: double-clicking the helper ran it unelevated,
+         it printed "Access denied" to a console a WinExe does not have, and
+         exited having done nothing. The icon was orphaned the same way. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>red_puzzle.ico</ApplicationIcon>
   </PropertyGroup>
-    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-  </ItemGroup>
 </Project>
