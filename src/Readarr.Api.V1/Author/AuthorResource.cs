@@ -47,7 +47,13 @@ namespace Readarr.Api.V1.Author
         // 0 = single-format author; every format uses QualityProfileId. Set
         // it and audiobook releases get their own profile and cutoff, which
         // is what lets one author hold both an ebook and an audiobook.
-        public int AudiobookQualityProfileId { get; set; }
+        //
+        // Nullable so an update can tell "not sent" from "set to none". A
+        // client written before the field existed reads an author, changes
+        // something else and PUTs back a body without it; binding that as 0
+        // would quietly make the author single-format again. Responses
+        // always carry a number.
+        public int? AudiobookQualityProfileId { get; set; }
         public int MetadataProfileId { get; set; }
 
         //Editing Only
@@ -153,7 +159,7 @@ namespace Readarr.Api.V1.Author
                 //AlternateTitles
                 Path = resource.Path,
                 QualityProfileId = resource.QualityProfileId,
-                AudiobookQualityProfileId = resource.AudiobookQualityProfileId,
+                AudiobookQualityProfileId = resource.AudiobookQualityProfileId ?? 0,
                 MetadataProfileId = resource.MetadataProfileId,
 
                 Monitored = resource.Monitored,
@@ -171,6 +177,16 @@ namespace Readarr.Api.V1.Author
         public static NzbDrone.Core.Books.Author ToModel(this AuthorResource resource, NzbDrone.Core.Books.Author author)
         {
             var updatedAuthor = resource.ToModel();
+
+            // ApplyChanges copies the audiobook profile unconditionally, so
+            // an absent field has to be turned back into the stored value
+            // here, where "absent" is still visible. An explicit 0 from the
+            // UI is not absent and still clears it.
+            if (!resource.AudiobookQualityProfileId.HasValue)
+            {
+                updatedAuthor.AudiobookQualityProfileId = author.AudiobookQualityProfileId;
+                updatedAuthor.AudiobookQualityProfile = author.AudiobookQualityProfile;
+            }
 
             author.ApplyChanges(updatedAuthor);
 

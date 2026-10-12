@@ -89,6 +89,19 @@ namespace NzbDrone.Host
             })
             .AddApplicationPart(typeof(SystemController).Assembly)
             .AddApplicationPart(typeof(StaticResourceController).Assembly)
+            .ConfigureApiBehaviorOptions(options =>
+            {
+                // Every concrete class in our assemblies is registered with
+                // the container (AutoAddServices), so MVC's "is this type a
+                // service?" probe says yes for every resource DTO and an
+                // unannotated complex action parameter is inferred as
+                // [FromServices]: the action is handed a fresh, empty
+                // instance and the request body is never read. Turning the
+                // inference off makes a forgotten [FromBody] bind from the
+                // body again. Service injection into an action now needs an
+                // explicit [FromServices].
+                options.DisableImplicitFromServicesParameters = true;
+            })
             .AddJsonOptions(options =>
             {
                 STJson.ApplySerializerSettings(options.JsonSerializerOptions);
