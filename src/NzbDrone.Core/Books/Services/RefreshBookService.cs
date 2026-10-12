@@ -85,11 +85,16 @@ namespace NzbDrone.Core.Books
         // the caller leaves it as it is and carries on. An exception means
         // the source itself is not answering, which is the caller's cue to
         // stop asking.
-        private Author GetSkyhookData(Book book)
+        //
+        // useCache is false only for a refresh the user asked for of this one
+        // book: see Execute(RefreshBookCommand). It applies to the book and
+        // its editions. The author is read through the cache regardless: that
+        // is the author's whole works list, and not what was asked for.
+        private Author GetSkyhookData(Book book, bool useCache)
         {
             try
             {
-                var tuple = _bookInfo.GetBookInfo(book.ForeignBookId);
+                var tuple = _bookInfo.GetBookInfo(book.ForeignBookId, useCache);
                 var author = _authorInfo.GetAuthorInfo(tuple.Item1);
                 var newbook = tuple.Item2;
 
@@ -200,7 +205,12 @@ namespace NzbDrone.Core.Books
             // the diff sees real editions. OpenLibraryProxy.GetBookInfo
             // memoizes the underlying HTTP resources for 7 days, so the
             // per-book fan-out is cheap on every refresh after the first.
-            var hydrated = GetSkyhookData(local);
+            //
+            // Always through the cache. This runs for every book of an author
+            // being refreshed; and when one book is refreshed by hand,
+            // RefreshBookInfo(book, useCache: false) has just fetched it and
+            // replaced the cached copy, so this reads what that put there.
+            var hydrated = GetSkyhookData(local, useCache: true);
             if (hydrated != null)
             {
                 var fullBook = hydrated.Books.Value.SingleOrDefault(x => x.ForeignBookId == local.ForeignBookId);
@@ -343,12 +353,30 @@ namespace NzbDrone.Core.Books
 
         protected override UpdateResult MergeEntity(Book local, Book target, Book remote)
         {
-            _logger.Warn($"Book {local} was merged with {remote} because the original was a duplicate.");
-
             // Update book ids for trackfiles
             var files = _mediaFileService.GetFilesByBook(local.Id);
-            files.ForEach(x => x.EditionId = target.Editions.Value.Single(e => e.Monitored).Id);
-            _mediaFileService.Update(files);
+
+            if (files.Any())
+            {
+                var edition = target.PrimaryEdition();
+
+                // Files belong to an edition, so they can only follow the
+                // book into one. Carrying on would delete the old book and
+                // its editions from under them. Leave this book as it is
+                // instead: the refresh goes on to fetch the target's
+                // editions, so the merge can happen on the next one.
+                if (edition == null)
+                {
+                    _logger.Warn("Book {0} was not merged into {1}: {1} has no editions to move its {2} file(s) to. It is kept as it is and the merge is tried again on the next refresh", local, target, files.Count);
+
+                    return UpdateResult.None;
+                }
+
+                files.ForEach(x => x.EditionId = edition.Id);
+                _mediaFileService.Update(files);
+            }
+
+            _logger.Warn($"Book {local} was merged with {remote} because the original was a duplicate.");
 
             // Update book ids for history
             var items = _historyService.GetByBook(local.Id, null);
@@ -579,7 +607,7 @@ namespace NzbDrone.Core.Books
             return RefreshEntityInfo(book, remoteBooks, remoteData, true, forceUpdateFileTags, null);
         }
 
-        public bool RefreshBookInfo(Book book)
+        public bool RefreshBookInfo(Book book, bool useCache = true)
         {
             if (IsLeftAsItIs(book))
             {
@@ -597,7 +625,7 @@ namespace NzbDrone.Core.Books
                 return false;
             }
 
-            var data = GetSkyhookData(book);
+            var data = GetSkyhookData(book, useCache);
 
             // Could not be fetched; GetSkyhookData has said why.
             if (data == null)
@@ -624,7 +652,13 @@ namespace NzbDrone.Core.Books
             {
                 var book = _bookService.GetBook(message.BookId.Value);
 
-                RefreshBookInfo(book);
+                // The source's copy of a book is cached for a week. Someone
+                // who has just corrected the record there and pressed Refresh
+                // on this book expects to see the correction, so that one case
+                // asks afresh. Scheduled and bulk refreshes keep the cache.
+                var useCache = message.Trigger != CommandTrigger.Manual;
+
+                RefreshBookInfo(book, useCache);
             }
         }
     }

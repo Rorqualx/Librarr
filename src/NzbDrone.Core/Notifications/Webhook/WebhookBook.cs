@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using NzbDrone.Core.Books;
 
 namespace NzbDrone.Core.Notifications.Webhook
@@ -16,7 +15,11 @@ namespace NzbDrone.Core.Notifications.Webhook
             GoodreadsId = book.ForeignBookId;
             Title = book.Title;
             ReleaseDate = book.ReleaseDate;
-            Edition = new WebhookBookEdition(book.Editions.Value.Single(e => e.Monitored));
+
+            // Null, and so absent from the payload's details, for a book
+            // that has no editions yet.
+            var edition = book.PrimaryEdition();
+            Edition = edition == null ? null : new WebhookBookEdition(edition);
         }
 
         public int Id { get; set; }

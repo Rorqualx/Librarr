@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Core.Books;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Organizer;
@@ -59,7 +60,7 @@ namespace Readarr.Api.V1.Search
                 else if (result is NzbDrone.Core.Books.Book book)
                 {
                     resource.Book = book.ToResource();
-                    resource.Book.Overview = book.Editions.Value.Single(x => x.Monitored).Overview;
+                    resource.Book.Overview = book.PrimaryEdition()?.Overview;
                     resource.Book.Author = book.Author.Value.ToResource();
                     resource.Book.Editions = book.Editions.Value.ToResource();
                     resource.ForeignId = book.ForeignBookId;

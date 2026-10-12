@@ -3,6 +3,8 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Books;
+using NzbDrone.Core.Books.Events;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Test.Framework;
 
 namespace NzbDrone.Core.Test.MusicTests.BookRepositoryTests
@@ -78,6 +80,38 @@ namespace NzbDrone.Core.Test.MusicTests.BookRepositoryTests
             var book = Subject.FindByTitleInexact(0, title);
 
             book.Should().BeNull();
+        }
+
+        // The book row is written before its editions are looked at, so
+        // throwing here left a book in the library that nothing was told
+        // about.
+        [Test]
+        public void should_add_a_book_that_has_no_editions()
+        {
+            var book = new Book { AuthorMetadataId = 1, Editions = new List<Edition>() };
+
+            Subject.AddBook(book);
+
+            Mocker.GetMock<IEditionService>()
+                .Verify(s => s.SetMonitored(It.IsAny<Edition>()), Times.Never());
+
+            Mocker.GetMock<IEventAggregator>()
+                .Verify(s => s.PublishEvent(It.IsAny<BookAddedEvent>()), Times.Once());
+        }
+
+        [Test]
+        public void should_monitor_the_monitored_edition_of_an_added_book()
+        {
+            var monitored = new Edition { ForeignEditionId = "OL2M", Monitored = true };
+            var book = new Book
+            {
+                AuthorMetadataId = 1,
+                Editions = new List<Edition> { new Edition { ForeignEditionId = "OL1M" }, monitored }
+            };
+
+            Subject.AddBook(book);
+
+            Mocker.GetMock<IEditionService>().Verify(s => s.SetMonitored(monitored), Times.Once());
         }
     }
 }

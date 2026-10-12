@@ -75,7 +75,14 @@ namespace NzbDrone.Core.Books
             editions.ForEach(x => x.BookId = newBook.Id);
 
             _editionService.InsertMany(editions.Where(x => x.Id == 0).ToList());
-            _editionService.SetMonitored(editions.FirstOrDefault(x => x.Monitored) ?? editions.First());
+
+            // Null for a work the source lists no editions for. The book row
+            // is already written by now, so this must not throw.
+            var toMonitor = editions.PrimaryEdition();
+            if (toMonitor != null)
+            {
+                _editionService.SetMonitored(toMonitor);
+            }
 
             _eventAggregator.PublishEvent(new BookAddedEvent(GetBook(newBook.Id), doRefresh));
 

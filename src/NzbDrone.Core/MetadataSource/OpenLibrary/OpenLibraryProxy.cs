@@ -221,9 +221,8 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
         // copy, so the cover picker and any later cached reader see the same
         // data the refresh did.
         //
-        // IProvideBookInfo.GetBookInfo has no such parameter yet, so nothing
-        // passes false today: the interface, MetadataSourceFactory and the
-        // refresh services need to carry it through.
+        // RefreshBookService passes false for a manual refresh of one book,
+        // and nothing else does.
         public Tuple<string, Book, List<AuthorMetadata>> GetBookInfo(string id, bool useCache = true)
         {
             var resources = FetchWorkBundle(id, useCache);
