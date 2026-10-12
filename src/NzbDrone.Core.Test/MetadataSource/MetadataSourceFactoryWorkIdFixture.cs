@@ -16,8 +16,8 @@ namespace NzbDrone.Core.Test.MetadataSource
         private void GivenMapping(string goodreadsId, string workId)
         {
             Mocker.GetMock<IBookIdMappingRepository>()
-                  .Setup(r => r.FindByGoodreadsId(goodreadsId))
-                  .Returns(new BookIdMapping { GoodreadsId = goodreadsId, OpenLibraryWorkId = workId });
+                  .Setup(r => r.FindBookByGoodreadsId(goodreadsId))
+                  .Returns(new BookIdMapping { GoodreadsId = goodreadsId, OpenLibraryWorkId = workId, Confidence = 0.95, Source = BookIdMappingSource.Isbn });
         }
 
         [Test]
@@ -26,7 +26,7 @@ namespace NzbDrone.Core.Test.MetadataSource
             Subject.GetOpenLibraryWorkId("OL27448W").Should().Be("OL27448W");
 
             Mocker.GetMock<IBookIdMappingRepository>()
-                  .Verify(r => r.FindByGoodreadsId(It.IsAny<string>()), Times.Never());
+                  .Verify(r => r.FindBookByGoodreadsId(It.IsAny<string>()), Times.Never());
         }
 
         [Test]

@@ -6,7 +6,6 @@ using NLog;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Books.Commands;
 using NzbDrone.Core.Books.Events;
-using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.History;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
@@ -82,6 +81,10 @@ namespace NzbDrone.Core.Books
             _logger = logger;
         }
 
+        // Null means this one book could not be fetched and has been logged;
+        // the caller leaves it as it is and carries on. An exception means
+        // the source itself is not answering, which is the caller's cue to
+        // stop asking.
         private Author GetSkyhookData(Book book)
         {
             try
@@ -105,12 +108,64 @@ namespace NzbDrone.Core.Books
                 author.Books = new List<Book> { newbook };
                 return author;
             }
-            catch (BookNotFoundException)
+            catch (Exception ex) when (!ReidentifyService.IsSourceUnreachable(ex))
             {
-                _logger.Error($"Could not find book with id {book.ForeignBookId}");
+                // This used to catch BookNotFoundException alone, which the
+                // OpenLibrary path never throws. A work deleted or merged
+                // away on OpenLibrary is an HttpException (404) there, and
+                // a work document with no author, or one that is only a
+                // redirect, fails in the author lookup that follows. Any of
+                // them escaped, ended the refresh of every book after this
+                // one, left the author's LastInfoSync unsaved, and did the
+                // same on every later run.
+                //
+                // So one book's failure stays with that book. It is not
+                // grounds for deleting it either: "the source returned an
+                // error for this id" is not "the source no longer lists
+                // it". Whether a book goes is decided from the author's
+                // works list, before anything is fetched.
+                //
+                // What still gets out is "the source is not answering" (the
+                // circuit breaker, a timeout, a 429 or 5xx that outlasted
+                // its retries). Going on book by book against a source that
+                // is down fails every one of them slowly.
+                _logger.Warn(ex, "Couldn't get info for book {0} from the metadata source. Leaving it as it is", book);
             }
 
             return null;
+        }
+
+        // Books that are in the library on purpose but that the source has
+        // nothing to say about under their own id. They are kept exactly as
+        // they are: asking the source about them fails or answers about
+        // something else, and their absence from its lists means nothing.
+        private bool IsLeftAsItIs(Book local)
+        {
+            // Imported from Readarr and not matched to an OpenLibrary work,
+            // or matched only by a guess nobody has confirmed.
+            if (_legacyBooks.IsUnmappedLegacyBook(local.ForeignBookId))
+            {
+                _logger.Info("Not refreshing book {0}: it still has its Readarr id and no confirmed OpenLibrary match. It is kept as it is until it is reidentified or its match is confirmed on the low-confidence mappings page", local);
+                return true;
+            }
+
+            // Matched to a work that another book in the library already
+            // answers for. The source lists the work once, under that
+            // book's id, so this one is never in the list. Refreshing it
+            // from the same work is not an option: edition ids are unique
+            // across the library, so the two books would take the work's
+            // editions from each other on alternate refreshes. Merging them
+            // is not ours to do either - they can hold different files and
+            // be monitored differently, and which one stays is the user's
+            // call.
+            var refreshedInstead = _legacyBooks.FindBookRefreshedInstead(local.ForeignBookId);
+            if (refreshedInstead != null)
+            {
+                _logger.Info("Not refreshing book {0}: it is matched to the same OpenLibrary work as the book with id {1}, which is the one refreshed from it. It is kept as it is; delete whichever of the two is not wanted, or correct its match", local, refreshedInstead);
+                return true;
+            }
+
+            return false;
         }
 
         protected override RemoteData GetRemoteData(Book local, List<Book> remote, Author data)
@@ -119,14 +174,15 @@ namespace NzbDrone.Core.Books
 
             var book = remote.SingleOrDefault(x => x.ForeignBookId == local.ForeignBookId);
 
-            if (book == null && ShouldDelete(local))
+            // Before ShouldDelete, which would otherwise read "not in the
+            // list" as "removed" for a book that could never be in it.
+            if (book == null && IsLeftAsItIs(local))
             {
+                result.LeaveAsIs = true;
                 return result;
             }
 
-            // Asking the source about an id it cannot translate fails the
-            // lookup and, with it, the rest of this author's refresh.
-            if (book == null && _legacyBooks.IsUnmappedLegacyBook(local.ForeignBookId))
+            if (book == null && ShouldDelete(local))
             {
                 return result;
             }
@@ -178,6 +234,14 @@ namespace NzbDrone.Core.Books
 
                     book = fullBook;
                 }
+            }
+            else
+            {
+                // This book could not be fetched. Not the slim entry from
+                // the list as a stand-in: its single placeholder edition is
+                // exactly the diff described above.
+                result.LeaveAsIs = true;
+                return result;
             }
 
             result.Entity = book;
@@ -517,7 +581,29 @@ namespace NzbDrone.Core.Books
 
         public bool RefreshBookInfo(Book book)
         {
+            if (IsLeftAsItIs(book))
+            {
+                return false;
+            }
+
+            // A book can have a confirmed match while its author has none.
+            // The source then names the book's author by an id the library
+            // does not know, and EnsureNewParent would add that author a
+            // second time next to the one imported from Readarr.
+            var foreignAuthorId = book.AuthorMetadata?.Value?.ForeignAuthorId;
+            if (_legacyBooks.IsUnmappedLegacyAuthor(foreignAuthorId))
+            {
+                _logger.Info("Not refreshing book {0}: its author still has a Readarr id and no confirmed OpenLibrary match. Confirm the author's match on the low-confidence mappings page first", book);
+                return false;
+            }
+
             var data = GetSkyhookData(book);
+
+            // Could not be fetched; GetSkyhookData has said why.
+            if (data == null)
+            {
+                return false;
+            }
 
             return RefreshBookInfo(book, data.Books, data, false);
         }
