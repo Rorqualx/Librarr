@@ -196,6 +196,51 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
         }
 
         [Test]
+        public void should_return_ok_on_rejected_import_event_if_file_exists()
+        {
+            GivenFolderExists(_downloadRootPath);
+
+            var localBook = new LocalBook
+            {
+                Path = Path.Combine(_downloadItemPath, "file.mp3")
+            };
+            GivenFileExists(localBook.Path);
+
+            var importEvent = new TrackImportFailedEvent(null, localBook, true, _downloadItem, true);
+
+            Subject.Check(importEvent).ShouldBeOk();
+        }
+
+        [Test]
+        public void should_return_ok_on_rejected_import_event_if_file_does_not_exist()
+        {
+            GivenFolderExists(_downloadRootPath);
+
+            var localBook = new LocalBook
+            {
+                Path = Path.Combine(_downloadItemPath, "file.mp3")
+            };
+
+            var importEvent = new TrackImportFailedEvent(null, localBook, true, _downloadItem, true);
+
+            Subject.Check(importEvent).ShouldBeOk();
+        }
+
+        [Test]
+        public void should_still_check_download_client_folders_on_rejected_import_event()
+        {
+            var localBook = new LocalBook
+            {
+                Path = Path.Combine(_downloadItemPath, "file.mp3")
+            };
+            GivenFileExists(localBook.Path);
+
+            var importEvent = new TrackImportFailedEvent(null, localBook, true, _downloadItem, true);
+
+            Subject.Check(importEvent).ShouldBeError(wikiFragment: "permissions-error");
+        }
+
+        [Test]
         public void should_return_permissions_error_on_book_import_failed_event_if_folder_exists()
         {
             GivenFolderExists(_downloadItemPath);

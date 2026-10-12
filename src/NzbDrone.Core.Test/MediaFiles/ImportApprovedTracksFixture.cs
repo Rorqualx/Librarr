@@ -151,6 +151,100 @@ namespace NzbDrone.Core.Test.MediaFiles
         }
 
         [Test]
+        public void should_flag_rejected_decisions_as_rejections_not_failures()
+        {
+            Subject.Import(_rejectedDecisions, false);
+
+            Mocker.GetMock<IEventAggregator>()
+                .Verify(v => v.PublishEvent(It.Is<TrackImportFailedEvent>(e => e.Rejected)), Times.Exactly(_rejectedDecisions.Count));
+
+            Mocker.GetMock<IEventAggregator>()
+                .Verify(v => v.PublishEvent(It.Is<TrackImportFailedEvent>(e => !e.Rejected)), Times.Never());
+
+            ExceptionVerification.ExpectedWarns(3);
+        }
+
+        [Test]
+        public void should_not_flag_a_failed_import_as_a_rejection()
+        {
+            Mocker.GetMock<IUpgradeMediaFiles>()
+                  .Setup(s => s.UpgradeBookFile(It.IsAny<BookFile>(), It.IsAny<LocalBook>(), It.IsAny<bool>()))
+                  .Throws(new System.UnauthorizedAccessException());
+
+            Subject.Import(_approvedDecisions, false);
+
+            Mocker.GetMock<IEventAggregator>()
+                .Verify(v => v.PublishEvent(It.Is<TrackImportFailedEvent>(e => !e.Rejected && e.Exception != null)), Times.Once());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_import_an_ebook_and_an_audiobook_for_the_same_book()
+        {
+            var ebookDecision = _approvedDecisions.First();
+            ebookDecision.Item.Quality = new QualityModel(Quality.EPUB);
+            ebookDecision.Item.Path = Path.Combine(ebookDecision.Item.Author.Path, "Alien Ant Farm - Pilot.epub");
+
+            var audiobookDecision = new ImportDecision<LocalBook>(
+                new LocalBook
+                {
+                    Author = ebookDecision.Item.Author,
+                    Book = ebookDecision.Item.Book,
+                    Edition = ebookDecision.Item.Edition,
+                    Part = ebookDecision.Item.Part,
+                    Path = Path.Combine(ebookDecision.Item.Author.Path, "Alien Ant Farm - Pilot.m4b"),
+                    Quality = new QualityModel(Quality.M4B),
+                    FileTrackInfo = new ParsedTrackInfo
+                    {
+                        ReleaseGroup = "DRONE"
+                    }
+                });
+
+            var all = new List<ImportDecision<LocalBook>> { ebookDecision, audiobookDecision };
+
+            var results = Subject.Import(all, false);
+
+            results.Should().HaveCount(2);
+            results.Should().OnlyContain(r => r.Result == ImportResultType.Imported);
+
+            Mocker.GetMock<IUpgradeMediaFiles>()
+                  .Verify(v => v.UpgradeBookFile(It.IsAny<BookFile>(), ebookDecision.Item, false), Times.Once());
+
+            Mocker.GetMock<IUpgradeMediaFiles>()
+                  .Verify(v => v.UpgradeBookFile(It.IsAny<BookFile>(), audiobookDecision.Item, false), Times.Once());
+        }
+
+        [Test]
+        public void should_only_import_one_file_per_format_for_the_same_book_and_part()
+        {
+            var ebookDecision = _approvedDecisions.First();
+            ebookDecision.Item.Quality = new QualityModel(Quality.EPUB);
+
+            var otherEbookDecision = new ImportDecision<LocalBook>(
+                new LocalBook
+                {
+                    Author = ebookDecision.Item.Author,
+                    Book = ebookDecision.Item.Book,
+                    Edition = ebookDecision.Item.Edition,
+                    Part = ebookDecision.Item.Part,
+                    Path = Path.Combine(ebookDecision.Item.Author.Path, "Alien Ant Farm - Pilot.mobi"),
+                    Quality = new QualityModel(Quality.MOBI),
+                    FileTrackInfo = new ParsedTrackInfo
+                    {
+                        ReleaseGroup = "DRONE"
+                    }
+                });
+
+            var all = new List<ImportDecision<LocalBook>> { ebookDecision, otherEbookDecision };
+
+            var results = Subject.Import(all, false);
+
+            results.Should().HaveCount(2);
+            results.Should().ContainSingle(r => r.Result == ImportResultType.Imported);
+        }
+
+        [Test]
         public void should_move_new_downloads()
         {
             Subject.Import(new List<ImportDecision<LocalBook>> { _approvedDecisions.First() }, true);

@@ -5,12 +5,15 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Books;
+using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.DecisionEngine;
 using NzbDrone.Core.DecisionEngine.Specifications;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Profiles;
+using NzbDrone.Core.Profiles.Qualities;
 using NzbDrone.Core.Qualities;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
@@ -107,6 +110,55 @@ namespace NzbDrone.Core.Test.DecisionEngineTests
             Subject.GetRssDecision(_reports).ToList();
 
             _failDelayed1.Verify(c => c.IsSatisfiedBy(_remoteBook, null), Times.Never());
+        }
+
+        private void GivenAuthorWithCustomFormatScores(int ebookScore, int audiobookScore)
+        {
+            var customFormat = new CustomFormat("Preferred") { Id = 1 };
+
+            _remoteBook.Author = new Author
+            {
+                QualityProfile = new QualityProfile
+                {
+                    Items = Qualities.QualityFixture.GetDefaultQualities(),
+                    FormatItems = new List<ProfileFormatItem> { new ProfileFormatItem { Format = customFormat, Score = ebookScore } }
+                },
+                AudiobookQualityProfileId = 2,
+                AudiobookQualityProfile = new QualityProfile
+                {
+                    Id = 2,
+                    Items = Qualities.QualityFixture.GetDefaultQualities(),
+                    FormatItems = new List<ProfileFormatItem> { new ProfileFormatItem { Format = customFormat, Score = audiobookScore } }
+                }
+            };
+
+            Mocker.GetMock<ICustomFormatCalculationService>()
+                  .Setup(c => c.ParseCustomFormat(It.IsAny<RemoteBook>(), It.IsAny<long>()))
+                  .Returns(new List<CustomFormat> { customFormat });
+        }
+
+        [Test]
+        public void should_score_custom_formats_against_the_audiobook_profile_for_an_audio_release()
+        {
+            GivenAuthorWithCustomFormatScores(10, 50);
+            GivenSpecifications(_pass1);
+
+            Subject.GetRssDecision(_reports).ToList();
+
+            _remoteBook.CustomFormatScore.Should().Be(50);
+        }
+
+        [Test]
+        public void should_score_custom_formats_against_the_ebook_profile_for_a_text_release()
+        {
+            _remoteBook.ParsedBookInfo.Quality = new QualityModel(Quality.EPUB);
+
+            GivenAuthorWithCustomFormatScores(10, 50);
+            GivenSpecifications(_pass1);
+
+            Subject.GetRssDecision(_reports).ToList();
+
+            _remoteBook.CustomFormatScore.Should().Be(10);
         }
 
         [Test]
