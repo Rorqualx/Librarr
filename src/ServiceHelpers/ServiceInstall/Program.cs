@@ -2,9 +2,9 @@
 {
     public static class Program
     {
-        private static void Main()
+        private static int Main()
         {
-            ServiceHelper.Run(@"/i");
+            return ServiceHelper.Run(@"/i");
         }
     }
 }

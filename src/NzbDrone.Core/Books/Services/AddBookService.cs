@@ -58,8 +58,13 @@ namespace NzbDrone.Core.Books
             _importListExclusionService.Delete(book.AuthorMetadata.Value.ForeignAuthorId);
 
             // Note it's a manual addition so it's not deleted on next refresh
+            // (a work the source lists no editions for has no edition to mark)
             book.AddOptions.AddType = BookAddType.Manual;
-            book.Editions.Value.Single(x => x.Monitored).ManualAdd = true;
+            var edition = book.PrimaryEdition();
+            if (edition != null)
+            {
+                edition.ManualAdd = true;
+            }
 
             // Add the author if necessary
             var dbAuthor = _authorService.FindById(book.AuthorMetadata.Value.ForeignAuthorId);
@@ -116,8 +121,10 @@ namespace NzbDrone.Core.Books
         {
             // A book can arrive naming no edition at all: the OpenLibrary
             // import lists only know the work. That is the same situation
-            // as an edition id that matches nothing, handled below.
-            var editionId = newBook.Editions?.Value?.SingleOrDefault(x => x.Monitored)?.ForeignEditionId;
+            // as an edition id that matches nothing, handled below. Only a
+            // monitored edition counts as named, so not PrimaryEdition, which
+            // would fall back to one the caller did not pick.
+            var editionId = newBook.Editions?.Value?.FirstOrDefault(x => x.Monitored)?.ForeignEditionId;
 
             Tuple<string, Book, List<AuthorMetadata>> tuple = null;
             try

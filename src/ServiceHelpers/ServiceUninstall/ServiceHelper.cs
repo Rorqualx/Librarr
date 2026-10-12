@@ -16,18 +16,18 @@ namespace ServiceUninstall
             return principal.IsInRole(WindowsBuiltInRole.Administrator);
         }
 
-        public static void Run(string arg)
+        public static int Run(string arg)
         {
             if (!File.Exists(ReadarrExe))
             {
-                Console.WriteLine("Unable to find Readarr.exe in the current directory.");
-                return;
+                Console.WriteLine("Unable to find Readarr.Console.exe in the current directory.");
+                return 2;
             }
 
             if (!IsAnAdministrator())
             {
                 Console.WriteLine("Access denied. Please run as administrator.");
-                return;
+                return 5;
             }
 
             var startInfo = new ProcessStartInfo
@@ -50,6 +50,8 @@ namespace ServiceUninstall
             process.BeginOutputReadLine();
 
             process.WaitForExit();
+
+            return process.ExitCode;
         }
 
         private static void OnDataReceived(object sender, DataReceivedEventArgs e)

@@ -73,7 +73,7 @@ namespace NzbDrone.Core.Test.BookTests
         private void GivenSourceFailsWith(Exception ex)
         {
             Mocker.GetMock<IProvideBookInfo>()
-                .Setup(s => s.GetBookInfo(It.IsAny<string>()))
+                .Setup(s => s.GetBookInfo(It.IsAny<string>(), It.IsAny<bool>()))
                 .Throws(ex);
         }
 
@@ -112,15 +112,39 @@ namespace NzbDrone.Core.Test.BookTests
                 .Verify(s => s.UpdateMany(It.IsAny<List<Book>>()), Times.Never());
         }
 
+        private void GivenLegacyBook(bool legacy)
+        {
+            Mocker.GetMock<IIdentifyUnmappedLegacyBooks>()
+                .Setup(s => s.IsLegacyBook(_book.ForeignBookId))
+                .Returns(legacy);
+        }
+
         [Test]
         public void should_delete_a_fileless_book_the_source_no_longer_lists()
         {
-            GivenUnmappedLegacyBook(false);
+            GivenLegacyBook(false);
 
             Subject.RefreshBookInfo(_book, new List<Book>(), _author, false);
 
             Mocker.GetMock<IBookService>()
                 .Verify(s => s.DeleteBook(_book.Id, It.IsAny<bool>(), It.IsAny<bool>()), Times.Once());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        // A mapped book from Readarr is listed only if its author and work
+        // were matched correctly. A confident match to the wrong author
+        // leaves every one of the user's books off the list.
+        [Test]
+        public void should_keep_a_fileless_mapped_readarr_book_the_source_does_not_list()
+        {
+            GivenUnmappedLegacyBook(false);
+            GivenLegacyBook(true);
+            GivenSourceFailsWith(NotFound());
+
+            Subject.RefreshBookInfo(_book, new List<Book>(), _author, false);
+
+            VerifyNothingDeleted();
 
             ExceptionVerification.ExpectedWarns(1);
         }
@@ -138,7 +162,7 @@ namespace NzbDrone.Core.Test.BookTests
             VerifyNothingSaved();
 
             Mocker.GetMock<IProvideBookInfo>()
-                .Verify(s => s.GetBookInfo(It.IsAny<string>()), Times.Never());
+                .Verify(s => s.GetBookInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
         }
 
         // Two legacy books, one OpenLibrary work: the works list names the
@@ -155,7 +179,7 @@ namespace NzbDrone.Core.Test.BookTests
 
             // Fetching it would hand it the other book's editions.
             Mocker.GetMock<IProvideBookInfo>()
-                .Verify(s => s.GetBookInfo(It.IsAny<string>()), Times.Never());
+                .Verify(s => s.GetBookInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
         }
 
         [Test]
@@ -168,7 +192,7 @@ namespace NzbDrone.Core.Test.BookTests
             VerifyNothingDeleted();
 
             Mocker.GetMock<IProvideBookInfo>()
-                .Verify(s => s.GetBookInfo(It.IsAny<string>()), Times.Never());
+                .Verify(s => s.GetBookInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
         }
 
         [Test]
@@ -179,10 +203,10 @@ namespace NzbDrone.Core.Test.BookTests
             Subject.RefreshBookInfo(new List<Book> { _book, _otherBook }, Listed(_book, _otherBook), _author, true, false, null);
 
             Mocker.GetMock<IProvideBookInfo>()
-                .Verify(s => s.GetBookInfo(_book.ForeignBookId), Times.Once());
+                .Verify(s => s.GetBookInfo(_book.ForeignBookId, It.IsAny<bool>()), Times.Once());
 
             Mocker.GetMock<IProvideBookInfo>()
-                .Verify(s => s.GetBookInfo(_otherBook.ForeignBookId), Times.Once());
+                .Verify(s => s.GetBookInfo(_otherBook.ForeignBookId, It.IsAny<bool>()), Times.Once());
 
             VerifyNothingDeleted();
             VerifyNothingSaved();
@@ -229,7 +253,7 @@ namespace NzbDrone.Core.Test.BookTests
                 Subject.RefreshBookInfo(new List<Book> { _book, _otherBook }, Listed(_book, _otherBook), _author, true, false, null));
 
             Mocker.GetMock<IProvideBookInfo>()
-                .Verify(s => s.GetBookInfo(_otherBook.ForeignBookId), Times.Never());
+                .Verify(s => s.GetBookInfo(_otherBook.ForeignBookId, It.IsAny<bool>()), Times.Never());
 
             VerifyNothingDeleted();
         }
@@ -275,7 +299,7 @@ namespace NzbDrone.Core.Test.BookTests
             Subject.Execute(new RefreshBookCommand(_book.Id));
 
             Mocker.GetMock<IProvideBookInfo>()
-                .Verify(s => s.GetBookInfo(It.IsAny<string>()), Times.Never());
+                .Verify(s => s.GetBookInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
 
             Mocker.GetMock<IAddAuthorService>()
                 .Verify(s => s.AddAuthor(It.IsAny<Author>(), It.IsAny<bool>()), Times.Never());

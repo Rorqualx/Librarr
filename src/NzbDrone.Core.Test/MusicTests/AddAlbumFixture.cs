@@ -44,7 +44,7 @@ namespace NzbDrone.Core.Test.MusicTests
                 .Build();
 
             Mocker.GetMock<IProvideBookInfo>()
-                .Setup(s => s.GetBookInfo(bookId))
+                .Setup(s => s.GetBookInfo(bookId, true))
                 .Returns(Tuple.Create(_fakeAuthor.Metadata.Value.ForeignAuthorId,
                                       _fakeBook,
                                       new List<AuthorMetadata> { _fakeAuthor.Metadata.Value }));
@@ -100,12 +100,43 @@ namespace NzbDrone.Core.Test.MusicTests
             var newBook = BookToAdd("edition", "book", "author");
 
             Mocker.GetMock<IProvideBookInfo>()
-                  .Setup(s => s.GetBookInfo("book"))
+                  .Setup(s => s.GetBookInfo("book", true))
                   .Throws(new BookNotFoundException("edition"));
 
             Assert.Throws<ValidationException>(() => Subject.AddBook(newBook));
 
             ExceptionVerification.ExpectedErrors(1);
+        }
+
+        // Some OpenLibrary works are stubs with no edition records at all.
+        [Test]
+        public void should_add_a_book_the_source_lists_no_editions_for()
+        {
+            var newBook = BookToAdd("book", "book", "author");
+
+            GivenValidBook("book", "edition");
+            GivenValidPath();
+
+            _fakeBook.Editions.Value.Clear();
+
+            var book = Subject.AddBook(newBook);
+
+            book.Editions.Value.Should().BeEmpty();
+            Mocker.GetMock<IBookService>().Verify(s => s.AddBook(book, true), Times.Once());
+        }
+
+        [Test]
+        public void should_not_throw_when_the_book_to_add_names_several_editions()
+        {
+            var newBook = BookToAdd("edition", "book", "author");
+            newBook.Editions.Value.Add(new Edition { ForeignEditionId = "other", Monitored = true });
+
+            GivenValidBook("book", "edition");
+            GivenValidPath();
+
+            var book = Subject.AddBook(newBook);
+
+            book.Editions.Value.Where(x => x.Monitored).Select(x => x.ForeignEditionId).Should().Equal("edition");
         }
 
         // An OpenLibrary search result has no edition key, only the work's.

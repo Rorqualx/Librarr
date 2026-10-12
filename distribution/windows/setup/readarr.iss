@@ -35,10 +35,12 @@
 ; NOTE: The value of AppId uniquely identifies this application.
 ; Do not use the same AppId value in installers for other applications.
 ; Fresh GUID so Windows tracks a Librarr install separately from a stock
-; Readarr one. Note that this does NOT make the two co-installable: both
-; register the same Windows service name (ServiceProvider.SERVICE_NAME is
-; still "Readarr"), and PrepareToInstall below stops and deletes it. The
-; supported path is migration, not coexistence.
+; Readarr one. Note that this does NOT make the two services co-installable:
+; both register the same Windows service name (ServiceProvider.SERVICE_NAME
+; is still "Readarr", kept so an upgrade from Readarr replaces its service
+; in place). PrepareToInstall below therefore only removes a "Readarr"
+; service that belongs to this install directory, and asks before taking
+; over one that does not.
 AppId={{FA3F8C19-9179-4676-B7A9-B8F9B411711A}
 AppName={#AppName}
 AppVersion={#BuildVersion}
@@ -50,7 +52,7 @@ AppUpdatesURL={#AppURL}
 ; AppFolderInfo.cs:36 already resolves AppDataFolder to
 ; %ProgramData%\Librarr, so installing into \Readarr scattered the
 ; binaries away from the data the app actually uses; and [InstallDelete]
-; below wipes {app}\bin, which under the old path would have deleted a
+; below empties {app}\bin, which under the old path would have deleted a
 ; stock Readarr installation's binaries out from under it.
 DefaultDirName={commonappdata}\Librarr
 DisableDirPage=yes
@@ -65,6 +67,14 @@ SolidCompression=yes
 AppCopyright=GNU General Public License v3
 AllowUNCPath=False
 UninstallDisplayIcon={app}\bin\Readarr.exe
+; Its own folder rather than the default {app}. {app} is the data folder,
+; and depending on the task chosen it is either unreadable to ordinary
+; users or writable by them. Neither suits the uninstaller: Windows has to
+; be able to launch it from an unelevated session, and it then runs
+; elevated, so nobody but an administrator may be able to replace it or
+; edit the log that tells it what to delete. SecureFolders below gives
+; this folder the same ACL as {app}\bin before anything is written to it.
+UninstallFilesDir={app}\uninstall
 DisableReadyPage=True
 CompressionThreads=2
 Compression=lzma2/normal
@@ -79,41 +89,329 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopIcon"; Description: "{cm:CreateDesktopIcon}"
-Name: "windowsService"; Description: "Install Windows Service (Starts when the computer starts as the LocalService user, you will need to change the user to access network shares)"; GroupDescription: "Start automatically"; Flags: exclusive
+Name: "windowsService"; Description: "Install Windows Service (Starts when the computer starts as the LocalService user. To access network shares you will need to change the user, and give that user Modify permission on the Librarr data folder)"; GroupDescription: "Start automatically"; Flags: exclusive
 Name: "startupShortcut"; Description: "Create shortcut in Startup folder (Starts when you log into Windows)"; GroupDescription: "Start automatically"; Flags: exclusive unchecked
 Name: "none"; Description: "Do not start automatically"; GroupDescription: "Start automatically"; Flags: exclusive unchecked
 
+; Folder permissions
+; ------------------
+; There used to be a [Dirs] entry here: `Name: "{app}"; Permissions:
+; users-modify`. {app} is %ProgramData%\Librarr, which holds both the data
+; (config.xml with the API key, the database, logs, backups) and, under
+; \bin, the executables the Windows service runs. users-modify therefore let
+; every local account, however unprivileged, replace the service's binaries
+; and read the API key.
+;
+; Inno's Permissions parameter can only add entries to an ACL; it cannot
+; switch inheritance off, and %ProgramData% itself hands BUILTIN\Users the
+; right to create files in every subfolder. So the ACLs are set with
+; icacls from SecureFolders in [Code], before any file is copied:
+;
+;   {app}\bin, {app}\uninstall   Administrators + SYSTEM: full
+;                                Users: read and execute
+;                                (inheritance off)
+;
+;   {app} (the data), service    Administrators + SYSTEM: full
+;   task selected                LocalService: modify
+;                                (inheritance off; ordinary users: nothing)
+;
+;   {app} (the data), startup-   Administrators + SYSTEM: full
+;   shortcut or no task          Users: modify
+;                                (inheritance off)
+;
+; The last row is as wide as the old behaviour for the data, and has to be:
+; without the service, Librarr runs as whichever user logs on, and that
+; user must be able to write the config and the database. The binaries are
+; locked down in every case.
+;
+; The cost of the service row: Readarr.exe (the tray application) opens the
+; data folder before it does anything else, so with the service installed
+; it only starts from an elevated session. That is why the Start Menu and
+; desktop shortcuts for the service task open the web UI instead of
+; launching Readarr.exe -- see [INI] and [Icons].
+
 [Dirs]
-Name: "{app}"; Permissions: users-modify
+Name: "{app}\bin"
+Name: "{app}\uninstall"
 
 [Files]
 Source: "..\..\..\_artifacts\{#Runtime}\{#Framework}\Readarr\Readarr.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
 Source: "..\..\..\_artifacts\{#Runtime}\{#Framework}\Readarr\*"; Excludes: "Readarr.Update"; DestDir: "{app}\bin"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
+[INI]
+; Internet shortcut to the web UI, for the service task. In {app}\bin
+; because ordinary users can read that folder and cannot read {app}.
+Filename: "{app}\bin\{#AppName}.url"; Section: "InternetShortcut"; Key: "URL"; String: "{code:GetWebUiUrl}"; Tasks: windowsService
+
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\bin\{#AppExeName}"; Parameters: "/icon"
-Name: "{commondesktop}\{#AppName}"; Filename: "{app}\bin\{#AppExeName}"; Parameters: "/icon"; Tasks: desktopIcon
+; Without the service, the shortcuts start the tray application.
+Name: "{group}\{#AppName}"; Filename: "{app}\bin\{#AppExeName}"; Parameters: "/icon"; Tasks: startupShortcut or none
+Name: "{commondesktop}\{#AppName}"; Filename: "{app}\bin\{#AppExeName}"; Parameters: "/icon"; Tasks: desktopIcon and (startupShortcut or none)
+; With it, they open the web UI the service is already serving.
+Name: "{group}\{#AppName}"; Filename: "{app}\bin\{#AppName}.url"; IconFilename: "{app}\bin\{#AppExeName}"; Tasks: windowsService
+Name: "{commondesktop}\{#AppName}"; Filename: "{app}\bin\{#AppName}.url"; IconFilename: "{app}\bin\{#AppExeName}"; Tasks: desktopIcon and windowsService
 Name: "{userstartup}\{#AppName}"; Filename: "{app}\bin\Readarr.exe"; WorkingDir: "{app}\bin"; Tasks: startupShortcut
 
 [InstallDelete]
-Name: "{app}\bin"; Type: filesandordirs
+; The contents of bin, not bin itself: SecureFolders has already put the
+; restricted ACL on the folder, and deleting it would have the files that
+; follow inherit {app}'s ACL instead.
+Name: "{app}\bin\*"; Type: filesandordirs
+; Uninstaller files left in {app} by installers that predate
+; UninstallFilesDir above. The new ones supersede them.
+Name: "{app}\unins*.exe"; Type: files
+Name: "{app}\unins*.dat"; Type: files
+Name: "{app}\unins*.msg"; Type: files
 
 [Run]
-Filename: "{app}\bin\Readarr.Console.exe"; StatusMsg: "Removing previous Windows Service"; Parameters: "/u /exitimmediately"; Flags: runhidden waituntilterminated;
+; There used to be a first entry here that ran `Readarr.Console.exe /u` to
+; remove "the previous Windows Service". By this point PrepareToInstall has
+; already removed the service if it belonged to this install, so the entry
+; had one remaining effect: with a task other than windowsService selected
+; it deleted whatever other service happened to be called "Readarr" -- a
+; stock Readarr install's, typically -- without replacing it.
 Filename: "{app}\bin\Readarr.Console.exe"; Description: "Enable Access from Other Devices"; StatusMsg: "Enabling Remote access"; Parameters: "/registerurl /exitimmediately"; Flags: postinstall runascurrentuser runhidden waituntilterminated; Tasks: startupShortcut none;
 Filename: "{app}\bin\Readarr.Console.exe"; StatusMsg: "Installing Windows Service"; Parameters: "/i /exitimmediately"; Flags: runhidden waituntilterminated; Tasks: windowsService
-Filename: "{app}\bin\Readarr.exe"; Description: "Open Librarr Web UI"; Flags: postinstall skipifsilent nowait; Tasks: windowsService;
+Filename: "{app}\bin\{#AppName}.url"; Description: "Open Librarr Web UI"; Flags: postinstall skipifsilent nowait shellexec; Tasks: windowsService;
 Filename: "{app}\bin\Readarr.exe"; Description: "Start Librarr"; Flags: postinstall skipifsilent nowait; Tasks: startupShortcut none;
 
-[UninstallRun]
-Filename: "{app}\bin\readarr.console.exe"; Parameters: "/u"; Flags: waituntilterminated skipifdoesntexist
+[UninstallDelete]
+Name: "{app}\bin"; Type: filesandordirs
+
+; No [UninstallRun]. It ran `readarr.console.exe /u`, which deletes the
+; service named "Readarr" whoever it belongs to. CurUninstallStepChanged
+; below removes it only when it points into this install.
 
 [Code]
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+const
+  ServiceName = 'Readarr';
+  ServiceKey = 'SYSTEM\CurrentControlSet\Services\Readarr';
+  // Well-known SIDs rather than names: "Administrators" and "Users" are
+  // translated on non-English Windows, the SIDs are not.
+  SidAdministrators = '*S-1-5-32-544';
+  SidSystem = '*S-1-5-18';
+  SidUsers = '*S-1-5-32-545';
+  SidLocalService = '*S-1-5-19';
+  SidEveryone = '*S-1-1-0';
+  SidAuthenticatedUsers = '*S-1-5-11';
+
+function ServiceExists(): Boolean;
+begin
+  Result := RegKeyExists(HKEY_LOCAL_MACHINE, ServiceKey);
+end;
+
+function ServiceImagePath(): String;
+begin
+  Result := '';
+  RegQueryStringValue(HKEY_LOCAL_MACHINE, ServiceKey, 'ImagePath', Result);
+end;
+
+// True when the existing "Readarr" service runs a binary inside the folder
+// this installer installs to (or, at uninstall, installed to).
+function ServiceIsOurs(): Boolean;
+var
+  ImagePath, AppDir: String;
+begin
+  ImagePath := Lowercase(Trim(ServiceImagePath()));
+  StringChangeEx(ImagePath, '"', '', True);
+  AppDir := Lowercase(AddBackslash(ExpandConstant('{app}')));
+  Result := (ImagePath <> '') and (Pos(AppDir, ImagePath) = 1);
+end;
+
+procedure RemoveService();
 var
   ResultCode: Integer;
 begin
-  Exec('net', 'stop readarr', '', 0, ewWaitUntilTerminated, ResultCode)
-  Exec('sc', 'delete readarr', '', 0, ewWaitUntilTerminated, ResultCode)
+  Exec(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Log('net stop ' + ServiceName + ': exit code ' + IntToStr(ResultCode));
+  // The service reports STOPPED slightly before its process is gone, and
+  // the files in {app}\bin stay locked until it is.
+  Sleep(2000);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'delete ' + ServiceName, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Log('sc delete ' + ServiceName + ': exit code ' + IntToStr(ResultCode));
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ImagePath: String;
+begin
+  Result := '';
+
+  if not ServiceExists() then
+    Exit;
+
+  ImagePath := ServiceImagePath();
+
+  if ServiceIsOurs() then
+  begin
+    // Upgrading in place. The service has to go before {app}\bin is emptied;
+    // the windowsService task puts it back.
+    Log('Removing the "' + ServiceName + '" service of this install before replacing its files: ' + ImagePath);
+    RemoveService();
+    Exit;
+  end;
+
+  if not WizardIsTaskSelected('windowsService') then
+  begin
+    Log('A "' + ServiceName + '" service exists but is not part of this install, and no service is being installed. Leaving it alone: ' + ImagePath);
+    Exit;
+  end;
+
+  // Somebody else's service -- a stock Readarr install, or a Librarr run from
+  // a zip. Windows allows one service per name, so installing ours means
+  // removing theirs. Say so, and do not do it unprompted.
+  if (ExpandConstant('{param:REPLACESERVICE|0}') = '1') or
+     (SuppressibleMsgBox(
+        'A Windows service named "' + ServiceName + '" is already installed and is not part of this ' + '{#AppName}' + ' installation:' + #13#10#13#10 +
+        ImagePath + #13#10#13#10 +
+        '{#AppName}' + ' uses the same service name, so installing its service will stop and remove the existing one. ' +
+        'The files and data of the other installation are not touched, but it will no longer start as a service.' + #13#10#13#10 +
+        'Replace the existing service?',
+        mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES) then
+  begin
+    Log('Replacing the existing "' + ServiceName + '" service: ' + ImagePath);
+    RemoveService();
+  end
+  else
+    Result :=
+      'The existing "' + ServiceName + '" service (' + ImagePath + ') was left in place and nothing was installed.' + #13#10#13#10 +
+      'Run Setup again and either agree to replace that service, or choose a start option other than "Install Windows Service". ' +
+      'For an unattended install, add /REPLACESERVICE=1.';
+end;
+
+procedure Icacls(const Arguments: String);
+var
+  ResultCode: Integer;
+begin
+  Log('icacls ' + Arguments);
+  ResultCode := -1;
+  if (not Exec(ExpandConstant('{sys}\icacls.exe'), Arguments, '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
+    RaiseException(
+      'Could not set folder permissions (icacls ' + Arguments + ' returned ' + IntToStr(ResultCode) + '). ' +
+      'Setup has stopped rather than leave the installation writable by every user.');
+end;
+
+// Administrators and SYSTEM in full control, everyone else read-only.
+procedure SecureProgramFolder(const Folder: String);
+begin
+  if not ForceDirectories(Folder) then
+    RaiseException('Could not create ' + Folder);
+
+  Icacls('"' + Folder + '" /inheritance:r /grant:r ' +
+         SidAdministrators + ':(OI)(CI)F ' + SidSystem + ':(OI)(CI)F ' + SidUsers + ':(OI)(CI)RX /Q');
+  // Explicit entries an earlier, laxer install (or the app itself) left behind.
+  Icacls('"' + Folder + '" /remove:g ' + SidEveryone + ' ' + SidAuthenticatedUsers + ' ' + SidLocalService + ' /Q');
+end;
+
+// Administrators and SYSTEM in full control, plus Modify for the one
+// principal the application will run as.
+procedure SecureDataFolder(const Folder: String);
+var
+  Writer, NotWriter: String;
+begin
+  if not ForceDirectories(Folder) then
+    RaiseException('Could not create ' + Folder);
+
+  if WizardIsTaskSelected('windowsService') then
+  begin
+    Writer := SidLocalService;
+    NotWriter := SidUsers;
+  end
+  else
+  begin
+    Writer := SidUsers;
+    NotWriter := SidLocalService;
+  end;
+
+  Icacls('"' + Folder + '" /inheritance:r /grant:r ' +
+         SidAdministrators + ':(OI)(CI)F ' + SidSystem + ':(OI)(CI)F ' + Writer + ':(OI)(CI)M /Q');
+  Icacls('"' + Folder + '" /remove:g ' + SidEveryone + ' ' + SidAuthenticatedUsers + ' ' + NotWriter + ' /Q');
+end;
+
+procedure SecureFolders();
+var
+  AppDir, DataDir: String;
+begin
+  AppDir := ExpandConstant('{app}');
+  // Where the application keeps its data whatever /DIR= says
+  // (AppFolderInfo: CommonApplicationData\Librarr).
+  DataDir := ExpandConstant('{commonappdata}\Librarr');
+
+  // The data folder first: when it is also {app}, which is the default,
+  // the two program folders below sit inside it and must not inherit from it.
+  SecureDataFolder(DataDir);
+
+  if CompareText(RemoveBackslash(AppDir), RemoveBackslash(DataDir)) <> 0 then
+    SecureProgramFolder(AppDir);
+
+  SecureProgramFolder(AppDir + '\bin');
+  SecureProgramFolder(AppDir + '\uninstall');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  // ssInstall is after PrepareToInstall and before [InstallDelete] and
+  // [Files], so every file lands in a folder that is already locked down.
+  if CurStep = ssInstall then
+    SecureFolders();
+end;
+
+function ConfigValue(const Xml, Tag, DefaultValue: String): String;
+var
+  OpenTag, CloseTag: String;
+  StartPos, EndPos: Integer;
+begin
+  Result := DefaultValue;
+  OpenTag := '<' + Tag + '>';
+  CloseTag := '</' + Tag + '>';
+  StartPos := Pos(OpenTag, Xml);
+  EndPos := Pos(CloseTag, Xml);
+
+  if (StartPos > 0) and (EndPos > StartPos) then
+    Result := Trim(Copy(Xml, StartPos + Length(OpenTag), EndPos - StartPos - Length(OpenTag)));
+
+  if Result = '' then
+    Result := DefaultValue;
+end;
+
+// The address the "Librarr" shortcut opens when the service task is chosen.
+// An existing config.xml (an upgrade, or a migrated Readarr folder) may have
+// moved the port or set a URL base; a fresh install has neither yet.
+function GetWebUiUrl(Param: String): String;
+var
+  Raw: AnsiString;
+  Xml, Port, UrlBase: String;
+begin
+  Port := '8787';
+  UrlBase := '';
+
+  if LoadStringFromFile(ExpandConstant('{commonappdata}\Librarr\config.xml'), Raw) then
+  begin
+    Xml := String(Raw);
+    Port := ConfigValue(Xml, 'Port', '8787');
+    UrlBase := ConfigValue(Xml, 'UrlBase', '');
+  end;
+
+  if StrToIntDef(Port, 0) <= 0 then
+    Port := '8787';
+
+  if (UrlBase <> '') and (Copy(UrlBase, 1, 1) <> '/') then
+    UrlBase := '/' + UrlBase;
+
+  Result := 'http://localhost:' + Port + UrlBase;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep <> usUninstall then
+    Exit;
+
+  if ServiceIsOurs() then
+  begin
+    Log('Removing the "' + ServiceName + '" service: ' + ServiceImagePath());
+    RemoveService();
+  end
+  else if ServiceExists() then
+    Log('A "' + ServiceName + '" service exists but does not belong to this installation. Leaving it alone: ' + ServiceImagePath());
 end;
