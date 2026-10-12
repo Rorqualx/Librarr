@@ -7,7 +7,7 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
-## [1.2.4-beta] — 2026-10-11
+## [1.2.4-beta] — 2026-10-12
 
 The fixes from a full audit of the fork: security hardening, the Readarr
 migration path, OpenLibrary handling, PostgreSQL, Windows and the Docker

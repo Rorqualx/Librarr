@@ -117,8 +117,8 @@ number that is wrong is worse than no number, because it gets trusted.
   hand-written source: **1004 `.js` / 32 `.ts` / 36 `.tsx`**. Hooks appear
   136 times across just 28 files; the codebase is still overwhelmingly
   class components.
-- **Tests:** NUnit + Moq + FluentAssertions; **3455 passing** in
-  `NzbDrone.Core.Test` (counted 2026-10-11).
+- **Tests:** NUnit + Moq + FluentAssertions; **3457 passing** in
+  `NzbDrone.Core.Test` (counted 2026-10-12).
   `build.yml` also runs the database tests on PostgreSQL 14 and 18 and a
   Windows smoke job. Selenium + ChromeDriver in
   `NzbDrone.Automation.Test` is years out of date — treat as historical,

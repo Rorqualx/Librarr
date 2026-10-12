@@ -8,7 +8,7 @@
 > 2026-07-30). Version-, count- and pin-bearing lines were re-verified
 > against the tree on 2026-07-30; treat anything older as suspect. The
 > shipping-version references below were bumped for the `1.2.4-beta`
-> tag on 2026-10-11, but nothing else in this file was re-verified then
+> tag on 2026-10-12, but nothing else in this file was re-verified then
 > — the counts and citations still date from 2026-07-30. Inherits its codebase from upstream `Readarr/Readarr` at
 > `develop` HEAD `0b79d300` ("Retirement announcement", 2025-06-27); last
 > upstream tagged release was `v0.4.18.2805` (commit `7cc02f95`,
