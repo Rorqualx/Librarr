@@ -38,3 +38,21 @@
 .actionCell {
   white-space: nowrap;
 }
+
+.rowError {
+  margin-top: 4px;
+  max-width: 320px;
+  color: var(--dangerColor);
+  font-size: 12px;
+}
+
+.loadError {
+  display: flex;
+  align-items: center;
+  padding: 16px 0;
+  color: var(--dangerColor);
+}
+
+.loadErrorMessage {
+  margin-right: 12px;
+}

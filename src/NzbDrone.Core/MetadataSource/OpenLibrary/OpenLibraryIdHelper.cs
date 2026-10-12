@@ -31,5 +31,57 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
 
         public static bool IsWorkId(string id)
             => id != null && WorkIdRegex.IsMatch(id);
+
+        // The Try* methods below take whatever a person pasted into a form
+        // and reduce it to the canonical id, or say it is not one. Is*Id
+        // above answers "is this stored value already canonical?" and is
+        // deliberately strict; these are deliberately forgiving about the
+        // *wrapping* and just as strict about the id inside it.
+        //
+        // Accepted: the bare id, the Open Library key ("/works/OL45804W"),
+        // and a full openlibrary.org URL with whatever slug or query string
+        // came along with it -- in any case, with stray whitespace. The key
+        // segment has to agree with the id type, so an author URL is never
+        // mistaken for a work.
+        private static readonly Regex WorkIdInputRegex = BuildInputRegex("works", "W");
+        private static readonly Regex AuthorIdInputRegex = BuildInputRegex("authors", "A");
+        private static readonly Regex EditionIdInputRegex = BuildInputRegex("books", "M");
+
+        public static bool TryNormalizeWorkId(string input, out string workId)
+            => TryNormalize(WorkIdInputRegex, input, out workId);
+
+        public static bool TryNormalizeAuthorId(string input, out string authorId)
+            => TryNormalize(AuthorIdInputRegex, input, out authorId);
+
+        public static bool TryNormalizeEditionId(string input, out string editionId)
+            => TryNormalize(EditionIdInputRegex, input, out editionId);
+
+        private static Regex BuildInputRegex(string segment, string suffix)
+        {
+            var id = @"(?<id>OL\d+" + suffix + ")";
+
+            return new Regex(
+                "^(?:" + id + @"|(?:(?:https?://)?(?:www\.)?openlibrary\.org)?/?" + segment + "/" + id + @"(?:\.json)?(?:[/?#].*)?)$",
+                RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        private static bool TryNormalize(Regex regex, string input, out string id)
+        {
+            id = null;
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return false;
+            }
+
+            var match = regex.Match(input.Trim());
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            id = match.Groups["id"].Value.ToUpperInvariant();
+            return true;
+        }
     }
 }
