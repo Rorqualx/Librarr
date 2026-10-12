@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Points the DbTest-derived fixtures at a local PostgreSQL instead of SQLite.
+  DbTest switches engine as soon as Readarr__Postgres__Host is non-empty; each
+  test then creates (and drops) its own "<uid>_main" / "<uid>_log" database,
+  so the user below needs CREATEDB.
+
+  The values match the "Unit tests (PostgreSQL)" job in
+  .github/workflows/build.yml. To get the same server locally:
+
+    docker run -d -e POSTGRES_USER=readarr -e POSTGRES_PASSWORD=readarr -p 5432:5432 postgres:17
+    dotnet test src/NzbDrone.Core.Test/Readarr.Core.Test.csproj -s src/postgres.runsettings
+
+  (This file used to hard-code one developer's private LAN address.)
+-->
 <RunSettings>
     <RunConfiguration>
         <EnvironmentVariables>
-            <Readarr__Postgres__Host>192.168.100.5</Readarr__Postgres__Host>
-			<Readarr__Postgres__Port>5432</Readarr__Postgres__Port>
-			<Readarr__Postgres__User>abc</Readarr__Postgres__User>
-			<Readarr__Postgres__Password>abc</Readarr__Postgres__Password>
+            <Readarr__Postgres__Host>localhost</Readarr__Postgres__Host>
+            <Readarr__Postgres__Port>5432</Readarr__Postgres__Port>
+            <Readarr__Postgres__User>readarr</Readarr__Postgres__User>
+            <Readarr__Postgres__Password>readarr</Readarr__Postgres__Password>
         </EnvironmentVariables>
     </RunConfiguration>
 </RunSettings>
