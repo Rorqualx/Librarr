@@ -1,5 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project>
+  <PropertyGroup>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="AutoFixture" Version="4.17.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" PrivateAssets="all" />
@@ -18,7 +21,7 @@
     <PackageVersion Include="Ical.Net" Version="4.3.1" />
     <PackageVersion Include="ImpromptuInterface" Version="7.0.1" />
     <PackageVersion Include="LazyCache" Version="2.4.0" />
-    <PackageVersion Include="Mailkit" Version="4.8.0" />
+    <PackageVersion Include="Mailkit" Version="4.16.0" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="6.0.35" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="2.1.7" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="6.0.2" />
@@ -26,6 +29,7 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="6.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="6.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="6.0.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="6.34.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
     <!-- 1.40.0 shipped Chromium 1091 (Nov 2023). That browser build crashes
          intermittently on current macOS: roughly one run in three died with
@@ -55,12 +59,13 @@
     <PackageVersion Include="Selenium.WebDriver.ChromeDriver" Version="134.0.6998.16500" />
     <PackageVersion Include="Sentry" Version="4.0.2" />
     <PackageVersion Include="SharpZipLib" Version="1.4.2" />
-    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.7" />
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageVersion Include="StyleCop.Analyzers" Version="1.1.118" />
     <PackageVersion Include="Swashbuckle.AspNetCore.Annotations" Version="6.6.2" />
     <PackageVersion Include="Swashbuckle.AspNetCore.SwaggerGen" Version="6.6.2" />
     <PackageVersion Include="System.Configuration.ConfigurationManager" Version="6.0.1" />
     <PackageVersion Include="System.Data.SQLite.Core.Servarr" Version="1.0.115.5-18" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="6.34.0" />
     <PackageVersion Include="System.IO.Abstractions.TestingHelpers" Version="17.0.24" />
     <PackageVersion Include="System.IO.Abstractions" Version="17.0.24" />
     <PackageVersion Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />

@@ -1,12 +1,75 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for more information:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-# https://containers.dev/guide/dependabot
+# Dependabot version updates.
+# https://docs.github.com/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+#
+# This file used to cover only `devcontainers`. Nothing watched the NuGet
+# or npm trees, which is how MailKit, ImageSharp and lodash sat on versions
+# with published advisories until someone ran a scan by hand.
+#
+# Shape, the same for every ecosystem: weekly, and minor + patch updates
+# arrive as ONE grouped pull request per ecosystem. Major updates are left
+# out of the groups on purpose, so each arrives on its own and can be read,
+# deferred or closed on its own -- several of them here are real migrations
+# (react-redux 7, react-router 5, FluentValidation 9), not version bumps.
+# `open-pull-requests-limit` caps how many of those can be open at once.
+#
+# This file configures VERSION updates only: it keeps things current, it
+# does not tell anyone that a pinned version has an advisory. That is
+# Dependabot alerts + security updates, which are repository settings
+# (Settings -> Advanced Security), not something a file can turn on. Both
+# were off when this was written. Security updates, once on, are not held
+# back by the limit below.
 
 version: 2
 updates:
- - package-ecosystem: "devcontainers"
-   directory: "/"
-   schedule:
-     interval: weekly
+  - package-ecosystem: "nuget"
+    # Directory.Packages.props, NuGet.config and the solution all live here.
+    directory: "/src"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      nuget-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Servarr / Lidarr forks, pinned to fork builds from the Servarr Azure
+      # feeds (src/NuGet.config). Their version strings are not upstream's,
+      # so anything proposed for them would be a guess. Move them by hand.
+      - dependency-name: "Servarr.FluentMigrator*"
+      - dependency-name: "System.Data.SQLite.Core.Servarr"
+      - dependency-name: "Mono.Posix.NETStandard"
+      - dependency-name: "TagLibSharp-Lidarr"
+
+  - package-ecosystem: "npm"
+    # package.json + yarn.lock (Yarn 1) at the repository root.
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    # Covers .github/workflows. Third-party actions are pinned to commit
+    # SHAs with the version in a trailing comment; Dependabot rewrites both.
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"

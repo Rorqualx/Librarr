@@ -31,7 +31,7 @@ jobs:
       # github-token is not passed: it defaults to ${{ github.token }}.
       # The remaining inputs the old file listed were all empty strings,
       # i.e. the action's own defaults spelled out.
-      - uses: dessant/lock-threads@v6
+      - uses: dessant/lock-threads@89ae32b08ed1a541efecbab17912962a5e38981c # v6.0.2
         with:
           issue-inactive-days: '90'
           issue-lock-reason: 'resolved'
