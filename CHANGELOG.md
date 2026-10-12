@@ -7,6 +7,59 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Security
+
+- **Librarr no longer talks to the retired Readarr project's servers.**
+  Inherited code still asked `readarr.servarr.com` whether an update existed
+  and trusted the package URL and hash it returned, fetched health-page
+  banners from it, and used it for the system-time and proxy checks, reporting
+  version, OS, architecture, runtime and database type along the way. That
+  host is not ours: it answered "no update" to every Librarr version and
+  listed Readarr 0.4.18 as the newest release, and whoever runs it could have
+  offered any package. Now:
+  - Update checks and System → Updates read this project's own
+    [GitHub releases](https://github.com/Rorqualx/Librarr/releases). The
+    package for your OS and architecture is picked locally and nothing about
+    the install is sent. The hash comes from the release's `SHA256SUMS`; a
+    package with no checksum entry is not offered.
+  - Health-page notifications from upstream are gone.
+  - The system-time and proxy checks use Open Library, which Librarr already
+    talks to.
+  - The web UI no longer reports browser errors to `sentry.servarr.com`
+    (the backend half was fixed in 1.2.1-beta).
+
+### Changed
+
+- **Automatic update installation is off by default on every platform.** It
+  used to default to on for Windows. Release packages are checksummed but not
+  signed, so installing them unattended is now opt-in (Settings → General →
+  Updates, with advanced settings shown). **Windows installs that never
+  changed this setting stop auto-installing after this upgrade**, because the
+  old default was never written to `config.xml`. Updates are still offered in
+  System → Updates and can be installed from there.
+
+### Fixed
+
+- **PostgreSQL: duplicate monitored editions were never cleaned up.** The
+  housekeeping task that leaves one monitored edition per book ran a statement
+  on PostgreSQL that changed nothing. On SQLite it fixed a book with two
+  monitored editions but needed several runs for three or more. Both engines
+  now leave exactly one (the most recently added) in a single run.
+
+- **PostgreSQL: two timestamps were stored without a time zone.** The date of
+  each Goodreads-to-OpenLibrary id mapping and the dates in the update history
+  were shifted by the server's UTC offset when read back, on any PostgreSQL
+  server not running in UTC. Migration 049 converts both columns; existing
+  values are corrected as part of the conversion. SQLite is unaffected and the
+  migration does nothing there.
+
+### Changed
+
+- **PostgreSQL is now tested in CI.** Every database test runs against
+  PostgreSQL 14 and 18, and the built app is started on an empty PostgreSQL
+  server so that all migrations are applied by the real host. Before this,
+  nothing the fork added had ever been run on PostgreSQL.
+
 ## [1.2.3-beta] — 2026-10-11
 
 A bug-fix release. Most of these are regressions from the .NET 10 migration

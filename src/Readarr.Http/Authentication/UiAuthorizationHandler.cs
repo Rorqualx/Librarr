@@ -1,8 +1,6 @@
-using System.Net;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
-using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Configuration.Events;
@@ -27,13 +25,9 @@ namespace NzbDrone.Http.Authentication
             if (_authenticationRequired == AuthenticationRequiredType.DisabledForLocalAddresses)
             {
                 if (context.Resource is HttpContext httpContext &&
-                    IPAddress.TryParse(httpContext.GetRemoteIP(), out var ipAddress))
+                    httpContext.IsLocalRequest(_configService.TrustCgnatIpAddresses))
                 {
-                    if (ipAddress.IsLocalAddress() ||
-                        (_configService.TrustCgnatIpAddresses && ipAddress.IsCgnatIpAddress()))
-                    {
-                        context.Succeed(requirement);
-                    }
+                    context.Succeed(requirement);
                 }
             }
 

@@ -39,12 +39,18 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary.Resources
         [JsonProperty("alternate_names")]
         public List<string> AlternateNames { get; set; }
 
+        [JsonConverter(typeof(OpenLibraryIdListConverter))]
         public List<int> Photos { get; set; }
     }
 
     public class OpenLibraryAuthorWorksResource
     {
+        // The author's total work count as OL reports it. Slightly generous:
+        // it counts records the list itself leaves out (Le Guin: size 252, 251
+        // entries), so it is not a reliable "is there more" test. Links.Next
+        // is. After OpenLibraryProxy.FetchAllWorks, Entries holds every page.
         public int Size { get; set; }
+        public OpenLibraryListLinks Links { get; set; }
         public List<OpenLibraryWorkResource> Entries { get; set; }
     }
 }

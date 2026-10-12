@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.AuthorStats;
@@ -14,6 +15,7 @@ using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.MetadataSource.OpenLibrary;
 using NzbDrone.Core.Validation;
 using NzbDrone.Core.Validation.Paths;
@@ -37,6 +39,9 @@ namespace Readarr.Api.V1.Books
         protected readonly IEditionService _editionService;
         protected readonly IAddBookService _addBookService;
         protected readonly OpenLibraryProxy _openLibraryProxy;
+        protected readonly MetadataSourceFactory _metadataSourceFactory;
+
+        private const string PinnedCoverUrlMessage = "Must be an https jpg, png or gif image on " + PinnedCoverUrl.AllowedHost;
 
         public BookController(IAuthorService authorService,
                           IBookService bookService,
@@ -49,7 +54,8 @@ namespace Readarr.Api.V1.Books
                           IBroadcastSignalRMessage signalRBroadcaster,
                           QualityProfileExistsValidator qualityProfileExistsValidator,
                           MetadataProfileExistsValidator metadataProfileExistsValidator,
-                          OpenLibraryProxy openLibraryProxy)
+                          OpenLibraryProxy openLibraryProxy,
+                          MetadataSourceFactory metadataSourceFactory)
 
         : base(bookService, seriesBookLinkService, authorStatisticsService, coverMapper, upgradableSpecification, signalRBroadcaster)
         {
@@ -57,6 +63,11 @@ namespace Readarr.Api.V1.Books
             _editionService = editionService;
             _addBookService = addBookService;
             _openLibraryProxy = openLibraryProxy;
+            _metadataSourceFactory = metadataSourceFactory;
+
+            // The full-resource routes carry the pinned cover too, so it is held
+            // to the same rule there as on the dedicated cover route.
+            SharedValidator.RuleFor(s => s.PreferredCoverUrl).Must(PinnedCoverUrl.IsAllowedOrEmpty).WithMessage(PinnedCoverUrlMessage);
 
             PostValidator.RuleFor(s => s.ForeignBookId).NotEmpty();
             PostValidator.RuleFor(s => s.Author.QualityProfileId).SetValidator(qualityProfileExistsValidator);
@@ -172,7 +183,17 @@ namespace Readarr.Api.V1.Books
                 return NotFound();
             }
 
-            book.PreferredCoverUrl = resource?.PreferredCoverUrl;
+            var preferredCoverUrl = resource?.PreferredCoverUrl;
+
+            if (!PinnedCoverUrl.IsAllowedOrEmpty(preferredCoverUrl))
+            {
+                throw new ValidationException(new List<ValidationFailure>
+                {
+                    new ValidationFailure(nameof(BookCoverPinResource.PreferredCoverUrl), PinnedCoverUrlMessage, preferredCoverUrl)
+                });
+            }
+
+            book.PreferredCoverUrl = preferredCoverUrl.IsNullOrWhiteSpace() ? null : preferredCoverUrl;
             _bookService.UpdateBook(book);
             BroadcastResourceChange(ModelAction.Updated, book.Id);
             return Accepted(book.Id);
@@ -192,7 +213,16 @@ namespace Readarr.Api.V1.Books
                 return new List<BookCoverResource>();
             }
 
-            var candidates = _openLibraryProxy.GetCoverCandidates(book.ForeignBookId);
+            // A book migrated from Readarr still carries its Goodreads id, which
+            // Open Library knows nothing about. Ask for the work it was mapped
+            // to; a book that was never mapped has no Open Library covers.
+            var workId = _metadataSourceFactory.GetOpenLibraryWorkId(book.ForeignBookId);
+            if (workId == null)
+            {
+                return new List<BookCoverResource>();
+            }
+
+            var candidates = _openLibraryProxy.GetCoverCandidates(workId);
             return candidates.Select(c => new BookCoverResource
             {
                 CoverId = c.CoverId,

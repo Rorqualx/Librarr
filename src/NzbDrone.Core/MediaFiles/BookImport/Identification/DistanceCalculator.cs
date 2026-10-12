@@ -92,15 +92,39 @@ namespace NzbDrone.Core.MediaFiles.BookImport.Identification
             // it used to fall into — a regression the ISBN-13 derivation would
             // otherwise introduce for exactly the Calibre/older files it aims
             // to help. (#13 review, Finding 1.)
+            //
+            // A candidate from a title/author search is a work, not an
+            // edition: it has no ISBN of its own (Isbn13 is null) and carries
+            // the ISBNs of all the work's editions in WorkIsbns instead. That
+            // list can confirm but cannot contradict. The file's ISBN being in
+            // it identifies the work as surely as an edition's own ISBN would,
+            // so it scores the isbn bucket at distance 0. Its absence means
+            // only that OpenLibrary has no edition record under that ISBN --
+            // which is the very situation that sends identification down the
+            // search path to begin with (the /isbn/ lookup missed) -- and
+            // scoring that as a mismatch would reject the right work for the
+            // source's incompleteness. So absence is isbn_missing, exactly as
+            // for a candidate with no ISBN at all, and an unrelated work gains
+            // nothing from the file having an ISBN.
             var isbn = IsbnUtils.ToIsbn13(localTracks.MostCommon(x => x.FileTrackInfo.Isbn));
             var editionIsbn = IsbnUtils.ToIsbn13(edition.Isbn13);
+            var workIsbns = edition.WorkIsbns ?? new List<string>();
+            var candidateHasIsbn = editionIsbn.IsNotNullOrWhiteSpace() || workIsbns.Count > 0;
             if (isbn.IsNotNullOrWhiteSpace() && editionIsbn.IsNotNullOrWhiteSpace())
             {
                 dist.AddBool("isbn", isbn != editionIsbn);
                 Logger.Trace("isbn: '{0}' vs '{1}'; {2}", isbn, editionIsbn, dist.NormalizedDistance());
             }
-            else if (isbn.IsNullOrWhiteSpace() != editionIsbn.IsNullOrWhiteSpace())
+            else if (isbn.IsNotNullOrWhiteSpace() && workIsbns.Contains(isbn))
             {
+                dist.AddBool("isbn", false);
+                Logger.Trace("isbn: '{0}' is one of the {1} listed for the work; {2}", isbn, workIsbns.Count, dist.NormalizedDistance());
+            }
+            else if (isbn.IsNotNullOrWhiteSpace() || candidateHasIsbn)
+            {
+                // An ISBN on one side that could not be compared with anything
+                // on the other: the file has one and the candidate none, the
+                // reverse, or the file's is not among the work's.
                 dist.AddBool("isbn_missing", true);
                 Logger.Trace("isbn: '{0}' vs '{1}'; {2}", isbn, editionIsbn, dist.NormalizedDistance());
             }

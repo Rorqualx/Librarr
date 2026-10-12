@@ -58,7 +58,7 @@ namespace NzbDrone.Core.HealthCheck.Checks
             // Probe a tiny stable resource (OL author "Mark Twain") rather
             // than the root, so we test the JSON content path and not just
             // the marketing redirect.
-            var request = _requestBuilder.For("authors/OL18319A.json").Build();
+            var request = _requestBuilder.For(OpenLibraryRequestBuilder.ProbePath).Build();
             request.SuppressHttpError = true;
 
             try

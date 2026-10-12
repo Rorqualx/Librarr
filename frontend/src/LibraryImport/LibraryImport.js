@@ -7,6 +7,7 @@ import PageContentBody from 'Components/Page/PageContentBody';
 import Table from 'Components/Table/Table';
 import TableBody from 'Components/Table/TableBody';
 import { kinds } from 'Helpers/Props';
+import getErrorMessage from 'Utilities/Object/getErrorMessage';
 import translate from 'Utilities/String/translate';
 import areAllSelected from 'Utilities/Table/areAllSelected';
 import getSelectedIds from 'Utilities/Table/getSelectedIds';
@@ -121,10 +122,11 @@ class LibraryImport extends Component {
       rootFolderPath,
       isPopulated,
       error,
+      rootFolderNotFound,
       items,
       isImporting,
       importError,
-      failedCount,
+      skippedCount,
       defaults,
       onQueueLookup,
       onSetValue,
@@ -138,12 +140,16 @@ class LibraryImport extends Component {
     } = this.state;
 
     const selectedCount = this.getSelectedIds().length;
+    const hasError = !!error || rootFolderNotFound;
+
+    // Whatever the server said went wrong, when it said anything.
+    const importErrorMessage = getErrorMessage(importError, null);
 
     return (
       <PageContent title={translate('LibraryImport')}>
         <PageContentBody>
           {
-            !isPopulated && !error &&
+            !isPopulated && !hasError &&
               <LoadingIndicator />
           }
 
@@ -155,28 +161,39 @@ class LibraryImport extends Component {
           }
 
           {
+            !error && rootFolderNotFound &&
+              <Alert kind={kinds.DANGER}>
+                {translate('LibraryImportRootFolderNotFound')}
+              </Alert>
+          }
+
+          {
             !!importError &&
               <Alert kind={kinds.DANGER}>
-                {translate('LibraryImportFailed')}
+                <div>{translate('LibraryImportFailed')}</div>
+                {
+                  !!importErrorMessage &&
+                    <div>{importErrorMessage}</div>
+                }
               </Alert>
           }
 
           {
-            !importError && !!failedCount &&
+            !importError && !!skippedCount &&
               <Alert kind={kinds.WARNING}>
-                {translate('LibraryImportPartialFailure', { count: failedCount })}
+                {translate('LibraryImportPartialFailure', { count: skippedCount })}
               </Alert>
           }
 
           {
-            isPopulated && !error && !items.length &&
+            isPopulated && !hasError && !items.length &&
               <Alert kind={kinds.INFO}>
                 {translate('LibraryImportNoUnmappedFolders', { path: rootFolderPath })}
               </Alert>
           }
 
           {
-            isPopulated && !error && !!items.length &&
+            isPopulated && !hasError && !!items.length &&
               <div>
                 <div className={styles.description}>
                   {translate('LibraryImportTableDescription')}
@@ -211,7 +228,7 @@ class LibraryImport extends Component {
         </PageContentBody>
 
         {
-          isPopulated && !error && !!items.length &&
+          isPopulated && !hasError && !!items.length &&
             <LibraryImportFooter
               selectedCount={selectedCount}
               isImporting={isImporting}
@@ -229,10 +246,11 @@ LibraryImport.propTypes = {
   rootFolderPath: PropTypes.string.isRequired,
   isPopulated: PropTypes.bool.isRequired,
   error: PropTypes.object,
+  rootFolderNotFound: PropTypes.bool.isRequired,
   items: PropTypes.arrayOf(PropTypes.object).isRequired,
   isImporting: PropTypes.bool.isRequired,
   importError: PropTypes.object,
-  failedCount: PropTypes.number.isRequired,
+  skippedCount: PropTypes.number.isRequired,
   defaults: PropTypes.object.isRequired,
   onMount: PropTypes.func.isRequired,
   onUnmount: PropTypes.func.isRequired,

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FizzWare.NBuilder;
 using Moq;
 using NUnit.Framework;
@@ -87,7 +88,7 @@ namespace NzbDrone.Core.Test.MusicTests
                 .Returns(new List<RootFolder>());
 
             Mocker.GetMock<IMonitorNewBookService>()
-                .Setup(x => x.ShouldMonitorNewBook(It.IsAny<Book>(), It.IsAny<List<Book>>(), It.IsAny<NewItemMonitorTypes>()))
+                .Setup(x => x.ShouldMonitorNewBook(It.IsAny<Book>(), It.IsAny<List<Book>>(), It.IsAny<NewItemMonitorTypes>(), It.IsAny<bool>()))
                 .Returns(true);
         }
 
@@ -117,6 +118,44 @@ namespace NzbDrone.Core.Test.MusicTests
             Mocker.GetMock<IAuthorService>(MockBehavior.Strict)
                 .Setup(x => x.UpdateAuthor(It.IsAny<Author>()))
                 .Returns((Author a) => a);
+        }
+
+        // Imported from Readarr and not matched, or matched only by a guess
+        // nobody has confirmed. Asking the source for its id fails, and did
+        // so with an error on every run.
+        [Test]
+        public void should_skip_an_author_whose_legacy_id_has_no_confirmed_mapping()
+        {
+            Mocker.GetMock<IIdentifyUnmappedLegacyBooks>()
+                .Setup(s => s.IsUnmappedLegacyAuthor(_author.ForeignAuthorId))
+                .Returns(true);
+
+            Subject.Execute(new RefreshAuthorCommand(_author.Id));
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetAuthorInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+
+            Mocker.GetMock<IAuthorService>()
+                .Verify(s => s.DeleteAuthor(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never());
+
+            VerifyEventNotPublished<AuthorRefreshCompleteEvent>();
+        }
+
+        [Test]
+        public void should_skip_such_an_author_in_the_scheduled_refresh_of_everyone()
+        {
+            Mocker.GetMock<IAuthorService>()
+                .Setup(s => s.GetAllAuthors())
+                .Returns(new List<Author> { _author });
+
+            Mocker.GetMock<IIdentifyUnmappedLegacyBooks>()
+                .Setup(s => s.IsUnmappedLegacyAuthor(_author.ForeignAuthorId))
+                .Returns(true);
+
+            Subject.Execute(new RefreshAuthorCommand { Trigger = CommandTrigger.Manual });
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetAuthorInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
         }
 
         [Test]
@@ -176,8 +215,12 @@ namespace NzbDrone.Core.Test.MusicTests
 
             Subject.Execute(new RefreshAuthorCommand(_author.Id));
 
+            // The existing books are handed over as one list (up to date and
+            // updated together), and the builder's author has a LastInfoSync,
+            // so it counts as previously synced. What that flag and the dates
+            // then do is RefreshAuthorNewBookMonitoringFixture's subject.
             Mocker.GetMock<IMonitorNewBookService>()
-                .Verify(x => x.ShouldMonitorNewBook(newBook, _books, _author.MonitorNewItems), Times.Once());
+                .Verify(x => x.ShouldMonitorNewBook(newBook, It.Is<List<Book>>(l => l.SequenceEqual(_books)), _author.MonitorNewItems, true), Times.Once());
         }
 
         [Test]

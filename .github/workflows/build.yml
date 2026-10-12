@@ -243,6 +243,159 @@ jobs:
         shell: bash
         run: dotnet test src/NzbDrone.Core.Test/Readarr.Core.Test.csproj -c Debug --no-build --filter 'Category!=IntegrationTest'
 
+  unit-tests-postgres:
+    # Librarr advertises SQLite *and* PostgreSQL, but until this job existed
+    # nothing in the fork had ever been executed against PostgreSQL: the
+    # upstream jobs that did it (azure-pipelines.yml, "Unit Native LinuxCore
+    # with Postgres14/15 Database") stopped running when that pipeline was
+    # retired, and every migration and query added since was only ever read.
+    #
+    # Two halves, both against a real server:
+    #   1. Core.Test with Readarr__Postgres__Host set. DbTest
+    #      (src/NzbDrone.Core.Test/Framework/DbTest.cs) switches every
+    #      DbTest-derived fixture, including the migration fixtures, to
+    #      PostgreSQL as soon as that variable is non-empty, creating and
+    #      dropping a database per test. The whole assembly runs rather than
+    #      a hand-kept list of fixtures, so a new DbTest is covered without
+    #      anyone remembering to add it here.
+    #   2. The published app booted on empty databases, so all migrations
+    #      are applied by the real host, then its API and housekeeping are
+    #      exercised (tests/e2e/postgres-boot.sh).
+    #
+    # Versions: upstream tested 14 and 15. This runs the oldest and the
+    # newest major PostgreSQL still supports, which brackets the rest.
+    #
+    # The server's time zone is deliberately not UTC, as it was upstream:
+    # `timestamp without time zone` columns only misbehave when the server
+    # and the app disagree about the zone, and a UTC server hides that.
+    name: Unit tests (PostgreSQL ${{ matrix.postgres }})
+    needs: build-backend
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['14', '18']
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: readarr
+          POSTGRES_PASSWORD: readarr
+          TZ: America/Chicago
+          PGTZ: America/Chicago
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U readarr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # The variables PostgresOptions.GetOptions() binds ("Readarr:Postgres").
+      # The test framework and the app read the same ones.
+      Readarr__Postgres__Host: localhost
+      Readarr__Postgres__Port: '5432'
+      Readarr__Postgres__User: readarr
+      Readarr__Postgres__Password: readarr
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download backend output
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-linux
+          path: .
+
+      - name: Restore exec bits on published artifacts
+        # actions/upload-artifact strips POSIX exec bits on non-Windows.
+        shell: bash
+        run: |
+          chmod +x _output/net10.0/linux-x64/publish/Readarr
+          chmod +x _tests/net10.0/linux-x64/publish/Readarr.Test.Dummy 2>/dev/null || true
+
+      - name: Show the server under test
+        shell: bash
+        run: |
+          docker exec "${{ job.services.postgres.id }}" \
+            psql -U readarr -d postgres -Atc "select version(); show timezone;"
+
+      - name: Core.Test against PostgreSQL
+        shell: bash
+        env:
+          # As test.sh does: keep the per-test log (every SQL statement,
+          # with DbTest's LogSql on) out of the console.
+          READARR_TESTS_LOG_OUTPUT: File
+        run: |
+          dotnet test _tests/net10.0/linux-x64/publish/Readarr.Core.Test.dll \
+            --filter 'Category!=ManualTest&Category!=WINDOWS&Category!=IntegrationTest&Category!=AutomationTest' \
+            --logger 'nunit;LogFilePath=PostgresTestResult.xml' \
+            --logger 'console;verbosity=minimal'
+
+      - name: Create the app's databases
+        # always(): the boot check below is independent evidence, so a red
+        # test step should not hide whether the app itself comes up.
+        if: always()
+        shell: bash
+        run: |
+          # The app migrates its databases but does not create them. These
+          # are ConfigFileProvider's default names.
+          for db in readarr-main readarr-log readarr-cache; do
+            docker exec "${{ job.services.postgres.id }}" \
+              psql -U readarr -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$db\" WITH OWNER = readarr ENCODING = 'UTF8';"
+          done
+
+      - name: Boot the app on PostgreSQL and exercise it
+        if: always()
+        shell: bash
+        run: bash tests/e2e/postgres-boot.sh
+
+      - name: Check every migration in the tree was applied by the app
+        # /system/status cannot answer this. It reports the highest applied
+        # version, and that is pinned at 158 by an inherited misnumbering
+        # (034_cdh_per_downloadclient.cs is [Migration(158)]), so it reads the
+        # same whether or not the newest migrations ran. Compare the whole
+        # list instead, in the main and the log database.
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(sed -n 's/.*\[Migration(0*\([0-9][0-9]*\))\].*/\1/p' \
+            src/NzbDrone.Core/Datastore/Migration/[0-9]*_*.cs | sort -n | grep -vx 0)
+          echo "Migrations in the tree: $(wc -l <<<"$expected")"
+          for db in readarr-main readarr-log; do
+            applied=$(docker exec "${{ job.services.postgres.id }}" \
+              psql -U readarr -d "$db" -v ON_ERROR_STOP=1 -Atc 'select "Version" from "VersionInfo" order by 1' | grep -vx 0)
+            echo "Applied in $db: $(wc -l <<<"$applied")"
+            diff <(echo "$expected") <(echo "$applied")
+          done
+
+      - name: Dump the migrated schema of the fork's tables
+        if: always()
+        shell: bash
+        run: |
+          docker exec "${{ job.services.postgres.id }}" \
+            psql -U readarr -d readarr-main -c '\d "BookIdMapping"' -c '\d "Narrators"' -c '\d "EditionNarrators"' || true
+          docker exec "${{ job.services.postgres.id }}" \
+            psql -U readarr -d readarr-log -c '\d "UpdateHistory"' || true
+
+      - name: Upload PostgreSQL test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-postgres-${{ matrix.postgres }}
+          path: |
+            **/PostgresTestResult.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
   lint-frontend:
     name: Lint frontend
     runs-on: ubuntu-22.04

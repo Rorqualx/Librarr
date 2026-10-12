@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using NzbDrone.Common.EnvironmentInfo;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
 
 namespace Readarr.Http.Extensions
@@ -86,6 +88,38 @@ namespace Readarr.Http.Extensions
             }
 
             return remoteIP.ToString();
+        }
+
+        // Whether the request comes from this host or a private network, for the
+        // "authentication disabled for local addresses" setting.
+        //
+        // RemoteIpAddress is the connection's peer unless a trusted proxy vouched
+        // for another address (see TrustedForwardedHeaders). An X-Forwarded-For
+        // that is still on the request at this point was not consumed by that
+        // middleware: it came from a peer we do not trust, or it names a client
+        // that could not be resolved. Either way we do not know who is really on
+        // the other end, so the request is not local.
+        public static bool IsLocalRequest(this HttpContext context, bool trustCgnatIpAddresses)
+        {
+            var remoteIP = context?.Connection?.RemoteIpAddress;
+
+            if (remoteIP == null)
+            {
+                return false;
+            }
+
+            if (context.Request.Headers.ContainsKey(ForwardedHeadersDefaults.XForwardedForHeaderName))
+            {
+                return false;
+            }
+
+            if (remoteIP.IsIPv4MappedToIPv6)
+            {
+                remoteIP = remoteIP.MapToIPv4();
+            }
+
+            return remoteIP.IsLocalAddress() ||
+                   (trustCgnatIpAddresses && remoteIP.IsCgnatIpAddress());
         }
 
         public static void DisableCache(this IHeaderDictionary headers)

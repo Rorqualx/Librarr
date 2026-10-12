@@ -18,6 +18,8 @@ namespace Readarr.Http.Frontend.Mappers
             _configFileProvider = configFileProvider;
         }
 
+        protected override string RootFolder => Path.Combine(_appFolderInfo.StartUpFolder, _configFileProvider.UiFolder);
+
         public override string Map(string resourceUrl)
         {
             var fileName = "favicon.ico";

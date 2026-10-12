@@ -4,6 +4,8 @@ interface CssExports {
   'author': string;
   'folder': string;
   'noMatches': string;
+  'outcome': string;
+  'outcomeIcon': string;
   'searchButton': string;
   'term': string;
 }

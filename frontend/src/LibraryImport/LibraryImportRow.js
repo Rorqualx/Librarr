@@ -33,6 +33,21 @@ function describeMatch({ workCount, topWork }) {
   return topWork ? `${works}, ${topWork}` : works;
 }
 
+// Why the last import left this row behind. The two reasons the server names
+// get their own wording; anything else is a lookup or validation failure and
+// the server's message is the most specific thing there is to say about it.
+function describeOutcome({ reason, message }) {
+  if (reason === 'duplicate') {
+    return translate('LibraryImportSkippedDuplicate');
+  }
+
+  if (reason === 'exists') {
+    return translate('LibraryImportSkippedExists');
+  }
+
+  return message || translate('LibraryImportSkippedFailed');
+}
+
 class LibraryImportRow extends Component {
 
   //
@@ -88,6 +103,7 @@ class LibraryImportRow extends Component {
       error,
       items,
       selectedAuthor,
+      importOutcome,
       isSelected,
       onSelectedChange
     } = this.props;
@@ -197,6 +213,19 @@ class LibraryImportRow extends Component {
                 onChange={this.onAuthorSelect}
               />
           }
+
+          {
+            !isFetching && !!importOutcome &&
+              <div className={styles.outcome}>
+                <Icon
+                  className={styles.outcomeIcon}
+                  name={icons.WARNING}
+                  kind={kinds.WARNING}
+                />
+
+                {describeOutcome(importOutcome)}
+              </div>
+          }
         </TableRowCell>
       </TableRow>
     );
@@ -212,6 +241,7 @@ LibraryImportRow.propTypes = {
   error: PropTypes.object,
   items: PropTypes.arrayOf(PropTypes.object).isRequired,
   selectedAuthor: PropTypes.object,
+  importOutcome: PropTypes.object,
   isSelected: PropTypes.bool,
   onSelectedChange: PropTypes.func.isRequired,
   onQueueLookup: PropTypes.func.isRequired,

@@ -1,10 +1,13 @@
 using System.Collections.Generic;
 using System.Linq;
+using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Books;
 using NzbDrone.Core.Books.Commands;
 using NzbDrone.Core.Messaging.Commands;
+using NzbDrone.Core.Profiles.Qualities;
 using Readarr.Http;
 
 namespace Readarr.Api.V1.Author
@@ -14,16 +17,29 @@ namespace Readarr.Api.V1.Author
     {
         private readonly IAuthorService _authorService;
         private readonly IManageCommandQueue _commandQueueManager;
+        private readonly IQualityProfileService _qualityProfileService;
 
-        public AuthorEditorController(IAuthorService authorService, IManageCommandQueue commandQueueManager)
+        public AuthorEditorController(IAuthorService authorService, IManageCommandQueue commandQueueManager, IQualityProfileService qualityProfileService)
         {
             _authorService = authorService;
             _commandQueueManager = commandQueueManager;
+            _qualityProfileService = qualityProfileService;
         }
 
         [HttpPut]
         public IActionResult SaveAll([FromBody] AuthorEditorResource resource)
         {
+            // Checked before anything is touched, so a bad id changes no
+            // author. 0 is the explicit "back to a single profile" and null
+            // is "No Change"; neither names a profile.
+            if (resource.AudiobookQualityProfileId > 0 && !_qualityProfileService.Exists(resource.AudiobookQualityProfileId.Value))
+            {
+                throw new ValidationException(new List<ValidationFailure>
+                {
+                    new ValidationFailure(nameof(resource.AudiobookQualityProfileId), "Quality Profile does not exist", resource.AudiobookQualityProfileId)
+                });
+            }
+
             var authorsToUpdate = _authorService.GetAuthors(resource.AuthorIds);
             var authorsToMove = new List<BulkMoveAuthor>();
 

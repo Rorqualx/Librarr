@@ -263,30 +263,32 @@ namespace NzbDrone.Host
             return $"{scheme}://{bindAddress}:{port}";
         }
 
-        private static X509Certificate2 ValidateSslCertificate(string cert, string password)
+        // Public so the diagnosis can be unit tested.
+        public static X509Certificate2 ValidateSslCertificate(string cert, string password)
         {
-            X509Certificate2 certificate;
+            // Checked up front rather than read back out of the exception.
+            // The HResults the old constructor used for a missing file
+            // (0x2, 0x2006D080) are not what X509CertificateLoader throws:
+            // it wraps the IO failure in a CryptographicException with the
+            // generic COR_E_CRYPTO HResult, and what it wraps differs by
+            // platform, so there is nothing portable to match on afterwards.
+            if (!File.Exists(cert))
+            {
+                throw new ReadarrStartupException($"The SSL certificate file {cert} does not exist");
+            }
 
             try
             {
-                // X509CertificateLoader replaces the obsolete constructor in
-                // .NET 10. It still throws CryptographicException for the two
-                // HResults handled below (file-not-found and bad password),
-                // so the error mapping underneath is unaffected.
-                certificate = X509CertificateLoader.LoadPkcs12FromFile(cert, password, X509KeyStorageFlags.DefaultKeySet);
+                return X509CertificateLoader.LoadPkcs12FromFile(cert, password, X509KeyStorageFlags.DefaultKeySet);
             }
-            catch (CryptographicException ex)
+            catch (Exception ex) when (ex is CryptographicException || ex is IOException || ex is UnauthorizedAccessException)
             {
-                if (ex.HResult == 0x2 || ex.HResult == 0x2006D080)
-                {
-                    throw new ReadarrStartupException(ex,
-                        $"The SSL certificate file {cert} does not exist");
-                }
-
-                throw new ReadarrStartupException(ex);
+                // The file is there, so what is left is a wrong password, a
+                // file that is not PKCS#12, or one we are not allowed to
+                // read. The loader does not reliably say which.
+                throw new ReadarrStartupException(ex,
+                    $"The SSL certificate file {cert} could not be loaded. Check that the certificate password is correct, that the file is a valid PKCS#12 (.pfx) certificate and that it is readable: {ex.Message}");
             }
-
-            return certificate;
         }
     }
 }
