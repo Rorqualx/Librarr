@@ -1,0 +1,184 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using FizzWare.NBuilder;
+using FluentAssertions;
+using Moq;
+using NUnit.Framework;
+using NzbDrone.Core.Books;
+using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.Test.Framework;
+
+namespace NzbDrone.Core.Test.BookTests
+{
+    [TestFixture]
+    public class RefreshBookServiceEditionFixture : CoreTest<RefreshBookService>
+    {
+        private const string WorkId = "OL1W";
+
+        private Author _author;
+        private Book _book;
+        private List<Edition> _stored;
+        private List<Edition> _remote;
+
+        private List<Edition> _updated;
+        private List<Edition> _deleted;
+
+        [SetUp]
+        public void Setup()
+        {
+            _updated = null;
+            _deleted = null;
+
+            var metadata = Builder<AuthorMetadata>.CreateNew().With(m => m.ForeignAuthorId = "OL1A").Build();
+
+            _author = Builder<Author>.CreateNew()
+                .With(a => a.Metadata = metadata)
+                .Build();
+
+            _book = Builder<Book>.CreateNew()
+                .With(b => b.ForeignBookId = WorkId)
+                .With(b => b.AuthorMetadata = metadata)
+                .With(b => b.Author = _author)
+                .Build();
+
+            Mocker.GetMock<IAuthorService>()
+                .Setup(s => s.FindById(It.IsAny<string>()))
+                .Returns(_author);
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Setup(s => s.GetAuthorInfo(It.IsAny<string>(), It.IsAny<bool>()))
+                .Returns(() => Builder<Author>.CreateNew().With(a => a.Metadata = metadata).Build());
+
+            Mocker.GetMock<IAugmentAudiobookInfo>()
+                .Setup(s => s.Augment(It.IsAny<Book>()))
+                .Returns((Book b) => b);
+
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(s => s.GetFilesByBook(It.IsAny<int>()))
+                .Returns(new List<BookFile>());
+
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(s => s.GetFilesByEdition(It.IsAny<int>()))
+                .Returns(new List<BookFile>());
+
+            Mocker.GetMock<IRefreshEditionService>()
+                .Setup(s => s.RefreshEditionInfo(It.IsAny<List<Edition>>(),
+                                                 It.IsAny<List<Edition>>(),
+                                                 It.IsAny<List<Tuple<Edition, Edition>>>(),
+                                                 It.IsAny<List<Edition>>(),
+                                                 It.IsAny<List<Edition>>(),
+                                                 It.IsAny<List<Edition>>(),
+                                                 It.IsAny<bool>()))
+                .Callback((List<Edition> add, List<Edition> update, List<Tuple<Edition, Edition>> merge, List<Edition> delete, List<Edition> upToDate, List<Edition> remote, bool tags) =>
+                {
+                    _updated = update;
+                    _deleted = delete;
+                });
+        }
+
+        private static Edition NewEdition(int id, string foreignId, bool monitored)
+        {
+            return Builder<Edition>.CreateNew()
+                .With(e => e.Id = id)
+                .With(e => e.BookId = 1)
+                .With(e => e.ForeignEditionId = foreignId)
+                .With(e => e.Title = "Title")
+                .With(e => e.Monitored = monitored)
+                .With(e => e.ManualAdd = false)
+                .Build();
+        }
+
+        private void GivenEditions(List<Edition> stored, List<Edition> remote)
+        {
+            _stored = stored;
+            _remote = remote;
+
+            // What the refresh works on, and what a later read of the
+            // database returns, must be separate instances.
+            Mocker.GetMock<IEditionService>()
+                .Setup(s => s.GetEditionsForRefresh(It.IsAny<int>(), It.IsAny<List<string>>()))
+                .Returns(() => _stored.Select(e => NewEdition(e.Id, e.ForeignEditionId, e.Monitored)).ToList());
+
+            Mocker.GetMock<IEditionService>()
+                .Setup(s => s.GetEditionsByBook(It.IsAny<int>()))
+                .Returns(() => _stored.Select(e => NewEdition(e.Id, e.ForeignEditionId, e.Monitored)).ToList());
+
+            var remoteBook = Builder<Book>.CreateNew()
+                .With(b => b.ForeignBookId = WorkId)
+                .With(b => b.Title = _book.Title)
+                .With(b => b.Editions = _remote)
+                .Build();
+
+            Mocker.GetMock<IProvideBookInfo>()
+                .Setup(s => s.GetBookInfo(WorkId))
+                .Returns(Tuple.Create("OL1A", remoteBook, new List<AuthorMetadata>()));
+        }
+
+        private void GivenFileOnEdition(int editionId)
+        {
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(s => s.GetFilesByBook(It.IsAny<int>()))
+                .Returns(new List<BookFile> { new BookFile { Id = 1, EditionId = editionId } });
+        }
+
+        private void Refresh()
+        {
+            // The author's works list still names the book; without that a
+            // fileless book is taken as removed and never reaches its editions.
+            var listed = Builder<Book>.CreateNew().With(b => b.ForeignBookId = WorkId).Build();
+
+            Subject.RefreshBookInfo(_book, new List<Book> { listed }, _author, false);
+        }
+
+        [Test]
+        public void should_save_both_sides_when_the_monitored_edition_changes()
+        {
+            // The user's edition (2) is monitored locally; the source picks 1.
+            GivenEditions(new List<Edition> { NewEdition(1, "OL1M", false), NewEdition(2, "OL2M", true) },
+                          new List<Edition> { NewEdition(0, "OL1M", true), NewEdition(0, "OL2M", false) });
+
+            Refresh();
+
+            _updated.Select(e => e.Id).Should().BeEquivalentTo(new[] { 1, 2 });
+            _updated.Where(e => e.Monitored).Select(e => e.Id).Should().Equal(1);
+        }
+
+        [Test]
+        public void should_not_delete_an_edition_that_has_files_when_the_source_omits_it()
+        {
+            GivenEditions(new List<Edition> { NewEdition(1, "OL1M", true), NewEdition(3, "OL3M", false) },
+                          new List<Edition> { NewEdition(0, "OL1M", true) });
+            GivenFileOnEdition(3);
+
+            Refresh();
+
+            _deleted.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_monitor_the_edition_that_has_the_file()
+        {
+            GivenEditions(new List<Edition> { NewEdition(1, "OL1M", true), NewEdition(3, "OL3M", false) },
+                          new List<Edition> { NewEdition(0, "OL1M", true) });
+            GivenFileOnEdition(3);
+
+            Refresh();
+
+            _updated.Where(e => e.Monitored).Select(e => e.Id).Should().Equal(3);
+            _updated.Where(e => !e.Monitored).Select(e => e.Id).Should().Equal(1);
+        }
+
+        [Test]
+        public void should_still_delete_an_edition_without_files_that_the_source_omits()
+        {
+            GivenEditions(new List<Edition> { NewEdition(1, "OL1M", true), NewEdition(3, "OL3M", false) },
+                          new List<Edition> { NewEdition(0, "OL1M", true) });
+
+            Refresh();
+
+            _deleted.Select(e => e.Id).Should().Equal(3);
+        }
+    }
+}
