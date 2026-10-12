@@ -61,7 +61,11 @@ $ErrorActionPreference = 'Stop'
 
 # Anything we build. Everything else in the publish directory belongs to
 # someone else -- see the note in the header about not signing it.
-$FirstPartyPatterns = @('Readarr*.exe', 'Readarr*.dll')
+#
+# The two service helpers are ours as well, and matter more than most: they
+# carry a requireAdministrator manifest, so Windows shows a UAC prompt for
+# them, and that prompt reads "Publisher: Unknown" for an unsigned file.
+$FirstPartyPatterns = @('Readarr*.exe', 'Readarr*.dll', 'ServiceInstall.exe', 'ServiceInstall.dll', 'ServiceUninstall.exe', 'ServiceUninstall.dll')
 
 function Find-SignTool {
     if ($env:SIGNTOOL_PATH -and (Test-Path -LiteralPath $env:SIGNTOOL_PATH)) {
