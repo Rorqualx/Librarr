@@ -114,7 +114,10 @@ namespace NzbDrone.Core.Books
 
         private Book AddSkyhookData(Book newBook)
         {
-            var editionId = newBook.Editions.Value.Single(x => x.Monitored).ForeignEditionId;
+            // A book can arrive naming no edition at all: the OpenLibrary
+            // import lists only know the work. That is the same situation
+            // as an edition id that matches nothing, handled below.
+            var editionId = newBook.Editions?.Value?.SingleOrDefault(x => x.Monitored)?.ForeignEditionId;
 
             Tuple<string, Book, List<AuthorMetadata>> tuple = null;
             try
@@ -149,7 +152,7 @@ namespace NzbDrone.Core.Books
             // so a refresh keeps it. Taking whichever edition the source
             // happened to list first would lock in a translation or a
             // coverless printing.
-            var monitoredEdition = newBook.Editions.Value.FirstOrDefault(x => x.ForeignEditionId == editionId)
+            var monitoredEdition = (editionId == null ? null : newBook.Editions.Value.FirstOrDefault(x => x.ForeignEditionId == editionId))
                 ?? sourcePick
                 ?? newBook.Editions.Value.FirstOrDefault();
             if (monitoredEdition != null)
