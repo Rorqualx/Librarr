@@ -72,10 +72,12 @@ several defaults are different.
   notification of either type is deleted at startup**, with a `Removing`
   line in the log.
 
-- **Dependency advisories:** frontend npm advisories went from 6 high and 11
-  moderate to none. MailKit/MimeKit, the JWT packages and ImageSharp were
-  updated. ImageSharp 3.1.12 still has open advisories that are fixed only in
-  the 4.x line; that move has not been made.
+- **Dependency advisories:** the frontend advisories `yarn audit` reported
+  (6 high, 11 moderate) were cleared, and MailKit/MimeKit, the JWT packages
+  and ImageSharp were updated. Not everything is clear: Dependabot alerts,
+  switched on for this release, list further advisories in npm packages used
+  to build and test the UI, and ImageSharp 3.1.12 has open advisories fixed
+  only in the 4.x line, which needs a licence key at build time.
 
 ### Changed
 
