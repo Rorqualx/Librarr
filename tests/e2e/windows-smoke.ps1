@@ -397,8 +397,25 @@ function Assert-ServiceAnswers {
     Wait-ServiceStatus 'Running'
     Wait-Until { Test-Ping } 180 "$BaseUrl/ping answers from the service"
 
+    # /ping answers before first-start initialisation has finished, and on a
+    # first-ever start config.xml can still be rewritten in that window: a
+    # key read then was refused with 401 a few hundred milliseconds after
+    # "Now listening" (seen once in CI, 2026-10-12). Read the key again on
+    # each attempt rather than holding on to the first one.
+    Wait-Until {
+        try {
+            $key = ([xml](Get-Content -LiteralPath (Join-Path $DataDir 'config.xml') -Raw)).Config.ApiKey
+            $script:serviceStatus = Get-Status $key
+            return $true
+        }
+        catch {
+            Write-Host "  status not answering yet: $($_.Exception.Message)"
+            return $false
+        }
+    } 30 'the service answers /system/status with the key in config.xml'
+
     $apiKey = Get-ApiKey (Join-Path $DataDir 'config.xml')
-    Assert-Status (Get-Status $apiKey) 'service'
+    Assert-Status $script:serviceStatus 'service'
 }
 
 function Invoke-ServiceStage {
