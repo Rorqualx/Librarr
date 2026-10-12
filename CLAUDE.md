@@ -75,8 +75,8 @@ number that is wrong is worse than no number, because it gets trusted.
   pinned in `global.json`),
   ASP.NET Core, **DryIoc 5.4.3** DI (`src/NzbDrone.Host/Bootstrap.cs:9-10,90`),
   custom Dapper-based ORM in `NzbDrone.Core/Datastore/`, Servarr-forked
-  FluentMigrator (`Servarr.FluentMigrator.Runner 3.3.2.9`; **48 migrations**,
-  latest `047_root_folder_audiobook_quality_profile`), dual **SQLite +
+  FluentMigrator (`Servarr.FluentMigrator.Runner 3.3.2.9`; **50 migrations**,
+  latest `049_postgres_update_timestamp_columns_to_with_timezone_part3`), dual **SQLite +
   PostgreSQL**, NLog logging, **Sentry 4.0.2**. Shipping version
   `1.2.3-beta` (`azure-pipelines.yml:22`). `Directory.Build.props:77`
   `AssemblyVersion 10.0.0.*` is the historical Readarr placeholder the CI
@@ -86,7 +86,7 @@ number that is wrong is worse than no number, because it gets trusted.
   2028-11-14. The Servarr-forked packages did **not** need replacing —
   `Servarr.FluentMigrator.Runner 3.3.2.9`,
   `System.Data.SQLite.Core.Servarr` and `Mono.Posix...-servarr22` all run
-  on .NET 10 unchanged, and all 48 migrations apply.
+  on .NET 10 unchanged, and every migration applies.
 
   **The trap that migration exposed:** since ASP.NET Core 7, a complex
   action parameter whose type is registered in the DI container is
@@ -117,8 +117,10 @@ number that is wrong is worse than no number, because it gets trusted.
   hand-written source: **1004 `.js` / 32 `.ts` / 36 `.tsx`**. Hooks appear
   136 times across just 28 files; the codebase is still overwhelmingly
   class components.
-- **Tests:** NUnit + Moq + FluentAssertions; **2789 passing** in
-  `NzbDrone.Core.Test`. Selenium + ChromeDriver in
+- **Tests:** NUnit + Moq + FluentAssertions; **3455 passing** in
+  `NzbDrone.Core.Test` (counted 2026-10-11).
+  `build.yml` also runs the database tests on PostgreSQL 14 and 18 and a
+  Windows smoke job. Selenium + ChromeDriver in
   `NzbDrone.Automation.Test` is years out of date — treat as historical,
   and it is the one suite still running nowhere.
 
@@ -144,9 +146,10 @@ number that is wrong is worse than no number, because it gets trusted.
 
   **Frontend: vitest + @testing-library/react + jsdom**, `yarn
   test:frontend`, config in `frontend/build/vitest.config.mjs`. Tests are
-  `*.test.js` next to the component. Coverage is *thin* — four files,
-  24 tests, all on the dual-format and Add Author surfaces. Treat any
-  other component as untested.
+  `*.test.js` next to the component. Coverage is *thin* — nine files,
+  60 tests (2026-10-11), on the dual-format, Add Author, Library Import,
+  low-confidence mapping and metadata-wizard surfaces. Treat any other
+  component as untested.
 
   One thing in that config is load-bearing and non-obvious: JSX inside
   `.js` needs a `transform` plugin, not the `esbuild: { loader, include }`
