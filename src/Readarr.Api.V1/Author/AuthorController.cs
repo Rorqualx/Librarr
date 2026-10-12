@@ -89,6 +89,15 @@ namespace Readarr.Api.V1.Author
             SharedValidator.RuleFor(s => s.QualityProfileId).SetValidator(qualityProfileExistsValidator);
             SharedValidator.RuleFor(s => s.MetadataProfileId).SetValidator(metadataProfileExistsValidator);
 
+            // 0 (or absent) means single-format and is always acceptable, so
+            // no ValidId() here -- same reasoning as the root folder's
+            // default. A profile that IS named has to exist: otherwise it is
+            // stored, QualityProfileFor falls back to the ebook profile, and
+            // the author looks dual-format while behaving single-format.
+            SharedValidator.RuleFor(s => s.AudiobookQualityProfileId).Cascade(CascadeMode.Stop)
+                           .SetValidator(qualityProfileExistsValidator)
+                           .When(s => s.AudiobookQualityProfileId > 0);
+
             PostValidator.RuleFor(s => s.Path).IsValidPath().When(s => s.RootFolderPath.IsNullOrWhiteSpace());
             PostValidator.RuleFor(s => s.RootFolderPath)
                          .IsValidPath()
@@ -167,6 +176,10 @@ namespace Readarr.Api.V1.Author
             var model = authorResource.ToModel(author);
 
             _authorService.UpdateAuthor(model);
+
+            // The resource is broadcast as received; if the client left the
+            // audiobook profile out, say what was kept rather than null.
+            authorResource.AudiobookQualityProfileId = model.AudiobookQualityProfileId;
 
             BroadcastResourceChange(ModelAction.Updated, authorResource);
 

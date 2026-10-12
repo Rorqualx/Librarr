@@ -88,13 +88,25 @@ number that is wrong is worse than no number, because it gets trusted.
   `System.Data.SQLite.Core.Servarr` and `Mono.Posix...-servarr22` all run
   on .NET 10 unchanged, and all 48 migrations apply.
 
-  **The trap that migration exposed:** ASP.NET Core 10 no longer infers
-  `[FromBody]` for complex parameters on controllers that opt in via
-  `IApiBehaviorMetadata` (which is how `V1ApiControllerAttribute` works).
-  Every write action silently bound an all-default model and failed
-  validation. All 39 write actions now carry explicit `[FromBody]` /
-  `[FromQuery]`, matching Sonarr v5. **Any new POST/PUT action must
-  annotate its parameters explicitly** — inference will not save you.
+  **The trap that migration exposed:** since ASP.NET Core 7, a complex
+  action parameter whose type is registered in the DI container is
+  inferred as `[FromServices]` (on controllers that opt in via
+  `IApiBehaviorMetadata`, which is how `V1ApiControllerAttribute` works).
+  `AutoAddServices` registers every concrete class in our assemblies, so
+  every resource DTO looks like a service: an unannotated parameter was
+  handed a fresh, empty instance from the container, the body was never
+  read, and validation failed on the all-default model. Jumping from
+  .NET 6 crossed that change. (Verified against the running app on
+  2026-10-11: with `[FromBody]` removed, the parameter's binding source
+  is `Services`; it is not that body inference was dropped.) All write
+  actions carry explicit `[FromBody]` / `[FromQuery]`, matching Sonarr v5,
+  and `Startup.cs` now sets
+  `ApiBehaviorOptions.DisableImplicitFromServicesParameters = true`, so a
+  forgotten attribute binds from the body again instead of from the
+  container. **Still annotate every POST/PUT parameter explicitly** —
+  `RouteParameterBindingFixture` fails the build's tests if a complex
+  parameter has no binding attribute — and a service injected into an
+  action now needs an explicit `[FromServices]`.
 - **Frontend:** **React 18.3.1** (real `createRoot` root API —
   `frontend/src/bootstrap.tsx:3,18` — not legacy mode) + Redux 4.2.1 with
   **legacy `createStore`**, not RTK. `react-redux` is still 7.2.4. Webpack 5,
