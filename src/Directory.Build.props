@@ -139,8 +139,11 @@
     <SentryAuthToken></SentryAuthToken> <!-- Use env var instead: SENTRY_AUTH_TOKEN -->
 
     <!-- Upload PDBs to Sentry, enabling stack traces with line numbers and file paths
-      without the need to deploy the application with PDBs -->
-    <SentryUploadSymbols>true</SentryUploadSymbols>
+      without the need to deploy the application with PDBs. Only when a token is
+      provided: from Sentry 4.x (seen on 4.13.0) a Release build with uploads on
+      and no token fails with "Auth token is required", and this fork has no
+      Sentry project to upload to. -->
+    <SentryUploadSymbols Condition="'$(SENTRY_AUTH_TOKEN)' != '' Or '$(SentryAuthToken)' != ''">true</SentryUploadSymbols>
 
     <!-- Source Link settings -->
     <!-- https://github.com/dotnet/sourcelink/blob/main/docs/README.md#publishrepositoryurl -->
