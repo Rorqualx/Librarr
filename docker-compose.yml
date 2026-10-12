@@ -7,7 +7,15 @@
 # next to this one, which is gitignored) so you never have to edit — and
 # dirty — this tracked file:
 #
-#   PUID / PGID          host uid/gid to own files under /config and /books
+#   LIBRARR_IMAGE        image to run; defaults to the :beta tag (see below)
+#   PUID / PGID          host uid/gid Librarr runs as (default 1000:1000). The
+#                        container starts as root, gives /config to this
+#                        user, then drops to it — files it writes under
+#                        /config, /books and /downloads are owned by it.
+#                        /books and /downloads are never chowned: make sure
+#                        this user can write to them on the host.
+#   UMASK_SET            umask for files Librarr creates (002 here = group-
+#                        writable; the image's own default is 022)
 #   TZ                   e.g. America/Denver; defaults to UTC
 #   LIBRARR_PORT         host port for the web UI (container side stays 8787)
 #   LIBRARR_CONFIG       host path for persistent app data
@@ -18,12 +26,20 @@
 #   TZ=America/Denver
 #   LIBRARR_BOOKS=/mnt/media/books
 #
+# Image tag: every release so far is a beta, so only `:beta` and the exact
+# version tags (e.g. `:1.2.3-beta`) are published. `:latest` will exist once
+# there is a stable release — until then pulling it fails.
+#
+# Prefer Docker's own `user:` over PUID/PGID? Add `user: "1000:1000"` to the
+# service: the container then never runs as root, PUID/PGID are ignored, and
+# the mounted directories must already be writable by that uid on the host.
+#
 # See distribution/docker/README.md for the multi-arch build instructions
-# and the full volume/port reference.
+# and the full volume/port/variable reference.
 
 services:
   librarr:
-    image: ${LIBRARR_IMAGE:-ghcr.io/rorqualx/librarr:latest}
+    image: ${LIBRARR_IMAGE:-ghcr.io/rorqualx/librarr:beta}
     container_name: librarr
     build:
       context: .

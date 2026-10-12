@@ -137,13 +137,18 @@ docker run -d \
   -v /path/to/config:/config \
   -v /path/to/books:/books \
   -e PUID=1000 -e PGID=1000 -e TZ=Etc/UTC \
-  ghcr.io/rorqualx/librarr:latest
+  ghcr.io/rorqualx/librarr:beta
 ```
 
-Docker Hub is the same image: `rorqualx/librarr:latest`. Tags are
+Docker Hub is the same image: `rorqualx/librarr:beta`. Tags are
 `:<version>` for every release, `:beta` on beta tags, and `:latest` only
-on non-prerelease tags — so on a beta line pin `:beta` or the explicit
-version rather than `:latest`.
+on non-prerelease tags. Every release so far is a beta, so **`:latest`
+does not exist yet** — use `:beta` or an explicit version such as
+`:1.2.3-beta` until there is a stable release.
+
+The container starts as root only long enough to give `/config` to
+`PUID:PGID` (default `1000:1000`), then runs Librarr as that user. It
+also works with `--user 1000:1000` and no `PUID`/`PGID` at all.
 
 `docker compose` and a local-build path are in
 [`distribution/docker/README.md`](distribution/docker/README.md).
