@@ -7,6 +7,87 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.2.3-beta] — 2026-10-11
+
+A bug-fix release. Most of these are regressions from the .NET 10 migration
+or gaps in the OpenLibrary and legacy-migration paths, found by an audit of
+everything the fork has added since Readarr.
+
+### Fixed
+
+- **Logged-out browsers got a blank 401 instead of the login page.** Reported
+  by [@solbu](https://github.com/solbu) in
+  [#17](https://github.com/Rorqualx/Librarr/issues/17). ASP.NET Core 10's
+  cookie handler no longer redirects on `[ApiController]` endpoints, and the
+  controller that serves the UI is one. Forms-auth installs on 1.1.0-beta and
+  later were affected. The UI pages redirect to `/login` again; the API still
+  answers 401. ([#18](https://github.com/Rorqualx/Librarr/pull/18))
+
+- **Five API endpoints ignored the id in their URL.** The .NET 10 binding
+  sweep bound five route parameters from the query string, so each always
+  arrived as `0` or empty. Restoring a backup from the list, grabbing a
+  pending release from the queue, pinning a book cover, reordering delay
+  profiles, and every provider action (loading an indexer's categories, the
+  OAuth steps for notifications) all failed. Reordering also read its target
+  from `afterId` while the UI has always sent `after`; it reads `after` now.
+  ([#19](https://github.com/Rorqualx/Librarr/pull/19))
+
+- **The scheduled author refresh never refreshed anyone.** OpenLibrary has no
+  "what changed" feed, and Librarr reported that as "nothing changed" rather
+  than "cannot tell", so every scheduled run skipped the whole library. New
+  books and metadata changes only arrived on a manual refresh. A run more than
+  14 days after the previous one had the same problem, inherited from Readarr.
+
+  The first scheduled refresh after upgrading will catch up on every author
+  that is due, which on a long-running install may be most of the library.
+  Requests go through the usual rate limit.
+  ([#20](https://github.com/Rorqualx/Librarr/pull/20))
+
+- **The Readarr migration could mark itself finished without finishing, and
+  books were then deleted.** If OpenLibrary was unreachable during the
+  first-boot migration, or the app restarted part-way through, the migration
+  was recorded as complete with some or all books unmapped. The next author
+  refresh deleted those books if they had no files.
+
+  Reidentify now fails, rather than completing, when any lookup could not
+  reach OpenLibrary, and reports how many. An interrupted or failed migration
+  resumes on the next startup instead of concluding. And a refresh no longer
+  deletes a book that still carries its Readarr id and has no mapping: not
+  being able to look a book up is not the same as it having been removed.
+  Such a book is kept and logged once per refresh.
+  ([#21](https://github.com/Rorqualx/Librarr/pull/21))
+
+- **A refresh could delete the edition a file belongs to.** Librarr reads the
+  first 200 editions of a work from OpenLibrary, and popular works have more
+  (*To Kill a Mockingbird* has 213). An edition outside that list was treated
+  as removed and deleted, leaving its file attached to nothing and the book
+  showing no files. Editions that hold files are now kept, and the edition
+  with the file is the one monitored, so the book is not reported missing.
+  ([#22](https://github.com/Rorqualx/Librarr/pull/22))
+
+- **A refresh could leave a book with no monitored edition.** When the
+  monitored edition changed during a refresh, the old one could be saved as
+  unmonitored while the new one was not saved at all.
+  ([#22](https://github.com/Rorqualx/Librarr/pull/22))
+
+- **Choosing an edition did not last.** An edition picked in Edit Book was
+  replaced by OpenLibrary's default pick on the next refresh. The choice now
+  stays until you choose another edition, or an import moves monitoring to the
+  edition it imported.
+
+  Books added from search also start on a better edition. They used to start
+  on whichever edition OpenLibrary listed first, often a translation; they now
+  start on the edition Librarr would pick itself (English, with a cover and an
+  ISBN where there is one). Books added before this release keep the edition
+  they were given. ([#24](https://github.com/Rorqualx/Librarr/pull/24))
+
+### Changed
+
+- **A manual reidentify can now end as failed.** It used to report completed
+  whatever happened. It now reports failed when lookups could not reach
+  OpenLibrary; the mappings it did write are kept, and running it again
+  continues from there.
+
 ## [1.2.2-beta] — 2026-08-22
 
 ### Added
@@ -673,7 +754,8 @@ fork's code-level inventory.
 - Internal `Readarr.*` csproj rename / `NzbDrone.*` namespace
   rebrand (deliberately preserved).
 
-[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.2-beta...HEAD
+[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.3-beta...HEAD
+[1.2.3-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.2-beta...v1.2.3-beta
 [1.2.2-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.1-beta...v1.2.2-beta
 [1.2.1-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.0-beta...v1.2.1-beta
 [1.2.0-beta]: https://github.com/Rorqualx/Librarr/compare/v1.1.0-beta...v1.2.0-beta
