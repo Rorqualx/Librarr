@@ -20,3 +20,12 @@
 .noMatches {
   color: var(--helpTextColor);
 }
+
+.outcome {
+  margin-top: 5px;
+  color: var(--helpTextColor);
+}
+
+.outcomeIcon {
+  margin-right: 5px;
+}

@@ -153,6 +153,23 @@ namespace NzbDrone.Core.MetadataSource
                    TranslateBookToOpenLibrary(foreignBookId) == null;
         }
 
+        // The OL work id to ask Open Library about for a book as it is stored
+        // locally: the id itself when it is already OL-shaped, its BookIdMapping
+        // translation for a book migrated from Readarr, or null when it has none.
+        // For callers that talk to OpenLibraryProxy directly instead of going
+        // through the IProvide* methods above.
+        public string GetOpenLibraryWorkId(string foreignBookId)
+        {
+            if (foreignBookId.IsNullOrWhiteSpace())
+            {
+                return null;
+            }
+
+            return OpenLibraryIdHelper.IsWorkId(foreignBookId)
+                ? foreignBookId
+                : TranslateBookToOpenLibrary(foreignBookId);
+        }
+
         private string TranslateBookToOpenLibrary(string foreignBookId)
         {
             if (foreignBookId.IsNullOrWhiteSpace())

@@ -78,6 +78,14 @@ namespace Readarr.Api.V1.RootFolders
                 .SetValidator(qualityProfileExistsValidator)
                 .When(c => c.DefaultAudiobookQualityProfileId > 0);
 
+            // Calibre roots hold ebooks only (see CalibreFormats.IsAudio), so
+            // an audiobook profile here would only arrange for audiobooks to
+            // be downloaded and then refused at import.
+            SharedValidator.RuleFor(c => c.DefaultAudiobookQualityProfileId)
+                .Equal(0)
+                .When(c => c.IsCalibreLibrary)
+                .WithMessage("Calibre libraries can only hold ebooks. Clear the audiobook quality profile, or use an ordinary root folder for audiobooks");
+
             SharedValidator.RuleFor(c => c.Host).ValidHost().When(x => x.IsCalibreLibrary);
             SharedValidator.RuleFor(c => c.Port).InclusiveBetween(1, 65535).When(x => x.IsCalibreLibrary);
             SharedValidator.RuleFor(c => c.UrlBase).ValidUrlBase().When(c => c.UrlBase.IsNotNullOrWhiteSpace());

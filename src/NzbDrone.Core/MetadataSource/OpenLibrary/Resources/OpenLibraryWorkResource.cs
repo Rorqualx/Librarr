@@ -3,11 +3,20 @@ using Newtonsoft.Json;
 
 namespace NzbDrone.Core.MetadataSource.OpenLibrary.Resources
 {
-    public class OpenLibraryWorkResource
+    public class OpenLibraryWorkResource : IOpenLibraryDocument
     {
         // OL returns keys as "/works/OL12345W". Strip the prefix at the boundary
         // before storing as ForeignBookId.
         public string Key { get; set; }
+
+        // "/type/work", or "/type/redirect" / "/type/delete" for a work that
+        // was merged away or removed. See OpenLibraryDocumentType.
+        [JsonConverter(typeof(OpenLibraryKeyOrStringConverter))]
+        public string Type { get; set; }
+
+        // On a redirect document, the key of the surviving work.
+        [JsonConverter(typeof(OpenLibraryKeyOrStringConverter))]
+        public string Location { get; set; }
 
         public string Title { get; set; }
 

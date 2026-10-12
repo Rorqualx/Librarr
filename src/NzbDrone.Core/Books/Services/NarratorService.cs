@@ -131,10 +131,11 @@ namespace NzbDrone.Core.Books
             // Walk EditionNarrator → Edition → Book. One narrator can
             // appear on multiple editions of the same book (e.g. an
             // abridged + unabridged audiobook), so dedup by BookId.
+            // FindEditions is one query for the whole set and returns no
+            // row for an id whose edition is gone, so a join row that
+            // outlived its edition is skipped (GetEdition would throw).
             var editionIds = joinRows.Select(r => r.EditionId).Distinct().ToList();
-            var bookIds = editionIds
-                .Select(id => _editionService.GetEdition(id))
-                .Where(e => e != null)
+            var bookIds = _editionService.FindEditions(editionIds)
                 .Select(e => e.BookId)
                 .Distinct()
                 .ToList();

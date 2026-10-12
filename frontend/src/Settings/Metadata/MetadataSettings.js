@@ -20,7 +20,10 @@ class MetadataSettings extends Component {
 
     this.state = {
       isSaving: false,
-      hasPendingChanges: false
+      hasPendingChanges: false,
+      // Bumped each time a reidentify run ends, so the review panel
+      // below reloads instead of showing the list from before the run.
+      mappingsReloadToken: 0
     };
   }
 
@@ -35,6 +38,10 @@ class MetadataSettings extends Component {
     this.setState(payload);
   };
 
+  onReidentifyFinished = () => {
+    this.setState((state) => ({ mappingsReloadToken: state.mappingsReloadToken + 1 }));
+  };
+
   onSavePress = () => {
     if (this._saveCallback) {
       this._saveCallback();
@@ -46,7 +53,8 @@ class MetadataSettings extends Component {
   render() {
     const {
       isSaving,
-      hasPendingChanges
+      hasPendingChanges,
+      mappingsReloadToken
     } = this.state;
 
     return (
@@ -62,8 +70,8 @@ class MetadataSettings extends Component {
             onChildMounted={this.onChildMounted}
             onChildStateChange={this.onChildStateChange}
           />
-          <MetadataSwitchWizardConnector />
-          <LowConfidenceMappings />
+          <MetadataSwitchWizardConnector onReidentifyFinished={this.onReidentifyFinished} />
+          <LowConfidenceMappings reloadToken={mappingsReloadToken} />
           {/* <MetadatasConnector /> */}
         </PageContentBody>
       </PageContent>

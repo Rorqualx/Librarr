@@ -22,12 +22,20 @@ namespace Readarr.Http.Frontend.Mappers
             _diskProvider = diskProvider;
         }
 
+        protected override string RootFolder => _appFolderInfo.GetMediaCoverPath();
+
         public override string Map(string resourceUrl)
         {
             var path = resourceUrl.Replace('/', Path.DirectorySeparatorChar);
             path = path.Trim(Path.DirectorySeparatorChar);
 
             var resourcePath = Path.Combine(_appFolderInfo.GetAppDataPath(), path);
+
+            // Don't probe the disk for a path that is going to be refused anyway.
+            if (!IsInsideRootFolder(resourcePath))
+            {
+                return resourcePath;
+            }
 
             if (!_diskProvider.FileExists(resourcePath) || _diskProvider.GetFileSize(resourcePath) == 0)
             {

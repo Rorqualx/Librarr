@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
+using System.Linq;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using Npgsql;
@@ -108,6 +109,29 @@ namespace NzbDrone.Core.Test.MusicTests.AuthorRepositoryTests
 
             author.Should().NotBeNull();
             author.ForeignAuthorId.Should().Be("d5be5333-4171-427e-8e12-732087c6b78e");
+        }
+
+        [Test]
+        public void should_find_authors_by_foreign_ids_in_one_call()
+        {
+            GivenAuthors();
+
+            var authors = _authorRepo.FindByIds(new List<string>
+            {
+                "d5be5333-4171-427e-8e12-732087c6b78e",
+                "d15721d8-56b4-453d-b506-fc915b14cba2",
+                "not-in-the-library"
+            });
+
+            authors.Select(a => a.Name).Should().BeEquivalentTo("The Black Eyed Peas", "The Black Keys");
+        }
+
+        [Test]
+        public void should_find_no_authors_for_an_empty_id_list()
+        {
+            GivenAuthors();
+
+            _authorRepo.FindByIds(new List<string>()).Should().BeEmpty();
         }
 
         [Test]

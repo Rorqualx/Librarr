@@ -9,6 +9,7 @@ namespace NzbDrone.Core.Books
     public interface IEditionRepository : IBasicRepository<Edition>
     {
         List<Edition> GetAllMonitoredEditions();
+        List<Edition> FindByIds(IEnumerable<int> ids);
         Edition FindByForeignEditionId(string foreignEditionId);
         List<Edition> FindByBook(IEnumerable<int> ids);
         List<Edition> FindByAuthor(int id);
@@ -28,6 +29,20 @@ namespace NzbDrone.Core.Books
         public List<Edition> GetAllMonitoredEditions()
         {
             return Query(x => x.Monitored == true);
+        }
+
+        public List<Edition> FindByIds(IEnumerable<int> ids)
+        {
+            // Unlike Get(IEnumerable<int>), ids with no matching row are
+            // skipped rather than treated as an error.
+            var idList = ids.Distinct().ToList();
+
+            if (idList.Count == 0)
+            {
+                return new List<Edition>();
+            }
+
+            return Query(x => idList.Contains(x.Id));
         }
 
         public Edition FindByForeignEditionId(string foreignEditionId)

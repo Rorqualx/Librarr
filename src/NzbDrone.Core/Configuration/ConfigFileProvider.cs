@@ -270,7 +270,12 @@ namespace NzbDrone.Core.Configuration
             }
         }
 
-        public bool UpdateAutomatically => _updateOptions.Automatically ?? GetValueBoolean("UpdateAutomatically", OsInfo.IsWindows, false);
+        // Off unless the user turns it on. Upstream defaulted this to true on
+        // Windows. Release packages are verified against the SHA256SUMS published
+        // alongside them, but neither is signed, so the checksum only proves the
+        // download matches what the release page holds, not who put it there.
+        // Installing that unattended is a decision for the user to make.
+        public bool UpdateAutomatically => _updateOptions.Automatically ?? GetValueBoolean("UpdateAutomatically", false, false);
 
         public UpdateMechanism UpdateMechanism =>
             Enum.TryParse<UpdateMechanism>(_updateOptions.Mechanism, out var enumValue)

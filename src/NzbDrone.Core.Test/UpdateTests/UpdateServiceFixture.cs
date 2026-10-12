@@ -185,6 +185,33 @@ namespace NzbDrone.Core.Test.UpdateTests
             Mocker.GetMock<IArchiveService>().Verify(v => v.Extract(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
         }
 
+        // The file name comes from the update server and is joined onto the
+        // sandbox folder, so it has to be a bare file name on every platform.
+        [TestCase("../Readarr.develop.0.6.2.883.zip")]
+        [TestCase("../../Readarr.develop.0.6.2.883.tar.gz")]
+        [TestCase(@"..\Readarr.develop.0.6.2.883.zip")]
+        [TestCase(@"..\..\Readarr.develop.0.6.2.883.zip")]
+        [TestCase("sub/Readarr.develop.0.6.2.883.zip")]
+        [TestCase("/tmp/Readarr.develop.0.6.2.883.zip")]
+        [TestCase(@"C:\Readarr\Readarr.develop.0.6.2.883.zip")]
+        [TestCase("C:Readarr.develop.0.6.2.883.zip")]
+        [TestCase("..")]
+        [TestCase(".")]
+        [TestCase("")]
+        [TestCase(null)]
+        public void should_not_download_package_whose_file_name_is_not_a_plain_file_name(string fileName)
+        {
+            _updatePackage.FileName = fileName;
+
+            Assert.Throws<CommandFailedException>(() => Subject.Execute(new ApplicationUpdateCommand()));
+
+            Mocker.GetMock<IHttpClient>().Verify(c => c.DownloadFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IDiskProvider>().Verify(c => c.DeleteFolder(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+            Mocker.GetMock<IArchiveService>().Verify(v => v.Extract(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
         [Test]
         [Platform(Exclude = "Win")]
         public void should_run_script_if_configured()

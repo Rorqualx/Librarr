@@ -104,6 +104,13 @@ namespace NzbDrone.Core.MediaFiles.BookImport
             //     the failure to History.
             // We deliberately do NOT add a second ImportResult here —
             // the AddRange below already does it.
+            //
+            // The event is flagged as a rejection. Its only subscribers
+            // today are health checks, and RemotePathMappingCheck reads an
+            // unflagged event carrying a LocalBook as "the file is there
+            // but could not be imported" — a permissions error. A file
+            // that was merely turned down ("not an upgrade", no match) is
+            // not a disk problem and must not be reported as one.
             foreach (var rejected in decisions.Where(e => !e.Approved))
             {
                 var rejectionText = string.Join(", ", rejected.Rejections.Select(r => r.Reason));
@@ -112,7 +119,7 @@ namespace NzbDrone.Core.MediaFiles.BookImport
                 if (rejected.Item != null)
                 {
                     _eventAggregator.PublishEvent(
-                        new TrackImportFailedEvent(null, rejected.Item, !rejected.Item.ExistingFile, downloadClientItem));
+                        new TrackImportFailedEvent(null, rejected.Item, !rejected.Item.ExistingFile, downloadClientItem, true));
                 }
             }
 
@@ -199,8 +206,12 @@ namespace NzbDrone.Core.MediaFiles.BookImport
 
                 try
                 {
-                    //check if already imported
-                    if (importResults.Where(r => r.ImportDecision.Item.Book.Id == localTrack.Book.Id).Any(r => r.ImportDecision.Item.Part == localTrack.Part))
+                    // check if already imported. Per format: an ebook and an
+                    // audiobook for the same book are separate slots, so one
+                    // must not make the other look like a duplicate.
+                    if (importResults.Where(r => r.ImportDecision.Item.Book.Id == localTrack.Book.Id)
+                                     .Where(r => r.ImportDecision.Item.Quality.Format() == localTrack.Quality.Format())
+                                     .Any(r => r.ImportDecision.Item.Part == localTrack.Part))
                     {
                         importResults.Add(new ImportResult(importDecision, "Book has already been imported"));
                         continue;

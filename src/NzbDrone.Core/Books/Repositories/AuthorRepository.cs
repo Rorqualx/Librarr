@@ -12,6 +12,7 @@ namespace NzbDrone.Core.Books
         bool AuthorPathExists(string path);
         Author FindByName(string cleanName);
         Author FindById(string foreignAuthorId);
+        List<Author> FindByIds(IEnumerable<string> foreignAuthorIds);
         Dictionary<int, string> AllAuthorPaths();
         Dictionary<int, List<int>> AllAuthorTags();
         Author GetAuthorByMetadataId(int authorMetadataId);
@@ -20,6 +21,8 @@ namespace NzbDrone.Core.Books
 
     public class AuthorRepository : BasicRepository<Author>, IAuthorRepository
     {
+        private const int ForeignIdChunkSize = 500;
+
         public AuthorRepository(IMainDatabase database,
                                 IEventAggregator eventAggregator)
             : base(database, eventAggregator)
@@ -48,6 +51,17 @@ namespace NzbDrone.Core.Books
         public Author FindById(string foreignAuthorId)
         {
             return Query(Builder().Where<AuthorMetadata>(m => m.ForeignAuthorId == foreignAuthorId)).SingleOrDefault();
+        }
+
+        public List<Author> FindByIds(IEnumerable<string> foreignAuthorIds)
+        {
+            // Chunked for the same reason as BookRepository.FindByIds: a
+            // string list is bound as one parameter per element.
+            return foreignAuthorIds.Distinct()
+                .Chunk(ForeignIdChunkSize)
+                .Select(chunk => chunk.ToList())
+                .SelectMany(chunk => Query(Builder().Where<AuthorMetadata>(m => chunk.Contains(m.ForeignAuthorId))))
+                .ToList();
         }
 
         public Author FindByName(string cleanName)

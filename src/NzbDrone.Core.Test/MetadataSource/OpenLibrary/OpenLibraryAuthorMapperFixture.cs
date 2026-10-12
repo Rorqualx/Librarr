@@ -75,6 +75,22 @@ namespace NzbDrone.Core.Test.MetadataSource.OpenLibrary
             author.Books.Value.Should().BeEmpty();
         }
 
+        // A merged or deleted author is served as a document with a key and a
+        // type and nothing else. The proxy resolves those before they get here,
+        // but a mapper that throws ArgumentNullException on a missing name
+        // takes a whole author refresh down with it if one ever slips through.
+        [Test]
+        public void should_not_throw_on_a_document_with_no_name()
+        {
+            var nameless = new OpenLibraryAuthorResource { Key = "/authors/OL26320A" };
+
+            var author = OpenLibraryAuthorMapper.ToAuthor(nameless, null);
+
+            author.Metadata.Value.ForeignAuthorId.Should().Be("OL26320A");
+            author.Metadata.Value.Name.Should().BeEmpty();
+            author.CleanName.Should().BeEmpty();
+        }
+
         // TopWork is OL's search-index notion and the works list is not
         // ordered by it, so guessing from the first entry would dress a
         // guess as a fact. describeMatch() in the wizard already renders

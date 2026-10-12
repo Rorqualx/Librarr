@@ -81,6 +81,55 @@ namespace NzbDrone.Core.Test.MetadataSource
             ExceptionVerification.ExpectedErrors(1);
         }
 
+        // What the HTTP dispatcher actually raises when a request hangs past its
+        // timeout, or the body stops arriving part-way. Hanging and dropping
+        // connections is how an overloaded server behaves, so these are the
+        // failures the breaker most needs to see.
+        [TestCase(WebExceptionStatus.Timeout)]
+        [TestCase(WebExceptionStatus.ReceiveFailure)]
+        [TestCase(WebExceptionStatus.ConnectFailure)]
+        [TestCase(WebExceptionStatus.NameResolutionFailure)]
+        public void should_trip_on_dispatcher_level_failures(WebExceptionStatus status)
+        {
+            for (var i = 0; i < MetadataSourceStatusService.ConsecutiveFailureThreshold; i++)
+            {
+                Subject.RecordFailure(new WebException("Http request timed out", null, status, null));
+            }
+
+            Subject.IsAvailable.Should().BeFalse();
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        // Not being counted was only half of it: an unrecognised failure is
+        // filed as "the source answered", which wipes the run so far. One
+        // timeout among the 429s kept the breaker closed indefinitely.
+        [Test]
+        public void a_timeout_should_not_reset_a_run_of_refusals()
+        {
+            GivenFailures(2, HttpStatusCode.TooManyRequests);
+            Subject.RecordFailure(new WebException("Http request timed out", null, WebExceptionStatus.Timeout, null));
+            GivenFailures(2, HttpStatusCode.TooManyRequests);
+
+            Subject.IsAvailable.Should().BeFalse("that is five failures to get an answer, in a row");
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        // HttpClient raises a WebException of its own for a redirect chain that
+        // never ends. The server was answering every hop of that, so it is a
+        // bad record rather than an unreachable source.
+        [Test]
+        public void should_not_trip_on_a_redirect_loop()
+        {
+            for (var i = 0; i < 50; i++)
+            {
+                Subject.RecordFailure(new WebException("Too many automatic redirections were attempted", WebExceptionStatus.ProtocolError));
+            }
+
+            Subject.IsAvailable.Should().BeTrue();
+        }
+
         [Test]
         public void should_count_mixed_transient_failures_together()
         {

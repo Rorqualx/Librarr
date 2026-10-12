@@ -1,0 +1,334 @@
+[
+  {
+    "url": "https://api.github.com/repos/Rorqualx/Librarr/releases/410072891",
+    "html_url": "https://github.com/Rorqualx/Librarr/releases/tag/v1.2.3-beta",
+    "id": 410072891,
+    "tag_name": "v1.2.3-beta",
+    "target_commitish": "main",
+    "name": "Librarr 1.2.3-beta",
+    "draft": false,
+    "prerelease": true,
+    "created_at": "2026-10-12T02:02:42Z",
+    "published_at": "2026-10-12T02:28:25Z",
+    "assets": [
+      {
+        "name": "Librarr.1.2.3-beta.linux-arm.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 102595972,
+        "digest": "sha256:763741df92373baf4b25f21d4e563d77c43d906013b181be699b5e6867dcf2e5",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.linux-arm.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.linux-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 103171268,
+        "digest": "sha256:6add3fb8f1cfe07164110daf0ea8f8c93000f0260de16396171fead992a02618",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.linux-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.linux-musl-arm.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 102632097,
+        "digest": "sha256:0fbb286fa7572471ff844f78a53a883db6f0d81a182d8f742727575f8828d650",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.linux-musl-arm.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.linux-musl-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 103209341,
+        "digest": "sha256:1c3438f590cf9e82155ffa86c49b81e9e14046fbba9080cc1d018289011269b9",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.linux-musl-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.linux-musl-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 107917913,
+        "digest": "sha256:888714a903324471e2a61427c34bd22894a491769b01ac8f405f1b164167c6b3",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.linux-musl-x64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.linux-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 107922505,
+        "digest": "sha256:9e0664bdd27b70ced50fa751b55538d8489764fad91212903d52e6a453c95b6b",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.linux-x64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.osx-arm64-app.zip",
+        "content_type": "application/zip",
+        "size": 62443172,
+        "digest": "sha256:721df997176f2dad1319b9451a5471a8bacef7153c5a0727b278ae0b65d8d5f7",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.osx-arm64-app.zip"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.osx-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 102656696,
+        "digest": "sha256:5b483ef5662f1d534f26913730a666da2538928320ca40a3d3f1e2bd21bed023",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.osx-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.osx-x64-app.zip",
+        "content_type": "application/zip",
+        "size": 65188092,
+        "digest": "sha256:7bb841d67dd56336e73a325502d32bf7079a268d3180184db9201eceefd7b6a5",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.osx-x64-app.zip"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.osx-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 107658099,
+        "digest": "sha256:b9b2e739985ab5ce0e639de0d64df55225fa03c8225e9a986acc6d55f8d83b0f",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.osx-x64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.win-x64-installer.exe",
+        "content_type": "application/octet-stream",
+        "size": 64175051,
+        "digest": "sha256:27286c35080b806075b381089a2947e4108ab1615d480b16618b6e7e78044ad8",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.win-x64-installer.exe"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.win-x64.zip",
+        "content_type": "application/zip",
+        "size": 124126285,
+        "digest": "sha256:81e632cf128e33592becb7b821d479a616da065966a3d8262b2f1201a37f6600",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.win-x64.zip"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.win-x86-installer.exe",
+        "content_type": "application/octet-stream",
+        "size": 60152519,
+        "digest": "sha256:081e7d4592391f58c7486dab27a0eb343a4acd73bf7a76b94d9f08edc274c4d9",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.win-x86-installer.exe"
+      },
+      {
+        "name": "Librarr.1.2.3-beta.win-x86.zip",
+        "content_type": "application/zip",
+        "size": 116492370,
+        "digest": "sha256:076090787e5496b059d58692b007704e6315aca8215cbd86eae2c378d3944a3f",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/Librarr.1.2.3-beta.win-x86.zip"
+      },
+      {
+        "name": "SHA256SUMS",
+        "content_type": "application/octet-stream",
+        "size": 1445,
+        "digest": "sha256:3ed093f8ff33e87b951387b3b0b22f338a28778055c49f584e829e9e5d986573",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.3-beta/SHA256SUMS"
+      }
+    ],
+    "body": "A bug-fix release. Full details in the [changelog](https://github.com/Rorqualx/Librarr/blob/main/CHANGELOG.md#123-beta--2026-10-11).\n\n**Fixed**\n\n- Logged-out browsers got a blank 401 instead of the login page (#17).\n- Five API endpoints ignored the id in their URL: restoring a backup, grabbing from the queue, pinning a cover, reordering delay profiles, and all provider actions (#19).\n- The scheduled author refresh never refreshed anyone under OpenLibrary (#20). The first scheduled refresh after upgrading will catch up on every author that is due.\n- The Readarr migration could mark itself finished without finishing, after which a refresh deleted unmapped books (#21).\n- A refresh could delete the edition a file belongs to, or leave a book with no monitored edition (#22).\n- An edition chosen in Edit Book reverted on the next refresh; books added from search started on whichever edition OpenLibrary listed first (#24).\n\n---\n\nVerify downloads against `SHA256SUMS` before installing. Upgrading from Readarr: see `docs/migrating-from-readarr.md`.\n\nWindows users have two options: `Librarr.<version>.win-x64-installer.exe` installs to `%ProgramData%\\Librarr` and can register the Windows service for you, or the `win-x64` / `win-x86` zips are a portable build — unzip and run `Readarr.exe` (tray) or `Readarr.Console.exe`.\n\nThe Windows binaries are not code-signed, so SmartScreen will warn on first run — choose \"More info\" then \"Run anyway\", or verify the checksum above instead.\n\n"
+  },
+  {
+    "url": "https://api.github.com/repos/Rorqualx/Librarr/releases/375044935",
+    "html_url": "https://github.com/Rorqualx/Librarr/releases/tag/v1.2.2-beta",
+    "id": 375044935,
+    "tag_name": "v1.2.2-beta",
+    "target_commitish": "main",
+    "name": "Librarr 1.2.2-beta",
+    "draft": false,
+    "prerelease": true,
+    "created_at": "2026-08-22T21:23:12Z",
+    "published_at": "2026-08-22T21:51:51Z",
+    "assets": [
+      {
+        "name": "Librarr.1.2.2-beta.linux-arm.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 102586230,
+        "digest": "sha256:c4a6dff1b1822229b325dfe6060af78bf8e5630bcf45c555b229a8e76e2e39ab",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.linux-arm.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.linux-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 103192126,
+        "digest": "sha256:e2376ef0bae612266431b6d702e10ee1e353bd13ea2d68edb87b7da966c0998d",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.linux-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.linux-musl-arm.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 102622619,
+        "digest": "sha256:554c0f22cca064e1d32f37413cfb4a93675639843c3a79330bd933cd1746fc73",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.linux-musl-arm.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.linux-musl-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 103197620,
+        "digest": "sha256:ce0c9c37e41264536df6a4f9c963042661a965d75e708e1248a3517a1f485006",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.linux-musl-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.linux-musl-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 107927573,
+        "digest": "sha256:f47cb18ed7184b9efe486540ce30efc658283583bdc5dad7d815631088daed54",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.linux-musl-x64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.linux-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 107922550,
+        "digest": "sha256:2be313bba9486263ed26708779da2fb1ea2d3d502e6b523e6524b93539b21e9d",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.linux-x64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.osx-arm64-app.zip",
+        "content_type": "application/zip",
+        "size": 62436670,
+        "digest": "sha256:77274905b933b1db72d02864c22baab7cecebe1b31acdf196b268e1b5e9ceb52",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.osx-arm64-app.zip"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.osx-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 102645803,
+        "digest": "sha256:56df2c4d1d782b69b749f816aaa2fd4983d9a0b3f28680b34445eee795ea027a",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.osx-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.osx-x64-app.zip",
+        "content_type": "application/zip",
+        "size": 65183858,
+        "digest": "sha256:6dd426f538fd6a99db4d51768c20450c9ac78cbf87cae51ae74d14be2bd943eb",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.osx-x64-app.zip"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.osx-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 107662354,
+        "digest": "sha256:061c84c2fc72282d69ae3948f8e40378670bfd0efc1288cf0ecf8447407027e2",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.osx-x64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.win-x64-installer.exe",
+        "content_type": "application/octet-stream",
+        "size": 64120559,
+        "digest": "sha256:e2bf0d5d103c0d841a7ecd184581d0812819ce5aac540006da8ff4b070fed248",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.win-x64-installer.exe"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.win-x64.zip",
+        "content_type": "application/zip",
+        "size": 123974602,
+        "digest": "sha256:8ab648b40d3b8a1ff0245a81187fb3317daeee1b29faf9c95645fdb7447831d6",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.win-x64.zip"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.win-x86-installer.exe",
+        "content_type": "application/octet-stream",
+        "size": 60123690,
+        "digest": "sha256:b1a87883ca9ac26919adf55433d70af1fee0f496fccce55d7ceefbacfbf719e5",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.win-x86-installer.exe"
+      },
+      {
+        "name": "Librarr.1.2.2-beta.win-x86.zip",
+        "content_type": "application/zip",
+        "size": 116360737,
+        "digest": "sha256:24088479093f5e21d74a1b5ba24c01ceee9f7e868eb220a8f816b631a9724e85",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/Librarr.1.2.2-beta.win-x86.zip"
+      },
+      {
+        "name": "SHA256SUMS",
+        "content_type": "application/octet-stream",
+        "size": 1445,
+        "digest": "sha256:1f774e01f7390c0b171b1fe48450a8a481f1abfc0eef89c9629798c8fdd78a42",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.2.2-beta/SHA256SUMS"
+      }
+    ],
+    "body": "Verify downloads against `SHA256SUMS` before installing. Upgrading from Readarr: see `docs/migrating-from-readarr.md`.\n\nWindows users have two options: `Librarr.<version>.win-x64-installer.exe` installs to `%ProgramData%\\Librarr` and can register the Windows service for you, or the `win-x64` / `win-x86` zips are a portable build — unzip and run `Readarr.exe` (tray) or `Readarr.Console.exe`.\n\nThe Windows binaries are not code-signed, so SmartScreen will warn on first run — choose \"More info\" then \"Run anyway\", or verify the checksum above instead.\n"
+  },
+  {
+    "url": "https://api.github.com/repos/Rorqualx/Librarr/releases/362654645",
+    "html_url": "https://github.com/Rorqualx/Librarr/releases/tag/v1.1.0-beta",
+    "id": 362654645,
+    "tag_name": "v1.1.0-beta",
+    "target_commitish": "main",
+    "name": "Librarr 1.1.0-beta",
+    "draft": false,
+    "prerelease": true,
+    "created_at": "2026-07-30T18:59:27Z",
+    "published_at": "2026-07-30T20:17:53Z",
+    "assets": [
+      {
+        "name": "Librarr.1.1.0-beta.linux-arm.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 93182525,
+        "digest": "sha256:cdae127e632b268e8c8873e1bf7516770cb6045f60a648b96f006217735b27a6",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.linux-arm.tar.gz"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.linux-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 92456354,
+        "digest": "sha256:4cfc2ec23766d1471840de614ac403a03c5971cdbfa6477913749d27461ee8c0",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.linux-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.linux-musl-arm.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 93249260,
+        "digest": "sha256:c3a93217ae02f80a0febd6003752a47160f23f5c0bfb95f45a4b136af1a51244",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.linux-musl-arm.tar.gz"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.linux-musl-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 92505008,
+        "digest": "sha256:d227959e3355f829a1ed529ee3724d0263267741ec110f9558a3884c62e03deb",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.linux-musl-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.linux-musl-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 96526277,
+        "digest": "sha256:b4183b25065c33b7a616efbc3ecea37613367db92e9e7ee8edbe6df4053dfff1",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.linux-musl-x64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.linux-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 97462025,
+        "digest": "sha256:feb030d8606b2f8dc7d8712e2ff69788e7ebf323b1549bfcfe3585f7ebcd8458",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.linux-x64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.osx-arm64-app.zip",
+        "content_type": "application/zip",
+        "size": 56949297,
+        "digest": "sha256:aa3a7f793d7208ade7de45d5dd84309c938211ed3253bee3cec7c97dde04bcb7",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.osx-arm64-app.zip"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.osx-arm64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 93898744,
+        "digest": "sha256:855733027a2a901416953cbe6a1adacf9aadd93eb0f33c34e2ec0130a2b7b461",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.osx-arm64.tar.gz"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.osx-x64-app.zip",
+        "content_type": "application/zip",
+        "size": 59222333,
+        "digest": "sha256:6ac9a052482e16d200e7a283d6c1a85655fcdde602c8bfcc61f73658ec213375",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.osx-x64-app.zip"
+      },
+      {
+        "name": "Librarr.1.1.0-beta.osx-x64.tar.gz",
+        "content_type": "application/x-gtar",
+        "size": 98068533,
+        "digest": "sha256:6a7f8bdb670e1e0291dd30bb6b7cd6060e37942e6e6b4fd30113833a32a78a0c",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/Librarr.1.1.0-beta.osx-x64.tar.gz"
+      },
+      {
+        "name": "SHA256SUMS",
+        "content_type": "application/octet-stream",
+        "size": 1037,
+        "digest": "sha256:40118391f15a148373f6f522939c1943760524cce620887914ad17c13f894c02",
+        "browser_download_url": "https://github.com/Rorqualx/Librarr/releases/download/v1.1.0-beta/SHA256SUMS"
+      }
+    ],
+    "body": "First release since `1.0.0-beta`, and the first with images for ARM.\n\n## Docker\n\n```bash\ndocker pull ghcr.io/rorqualx/librarr:1.1.0-beta   # or rorqualx/librarr:1.1.0-beta\n```\n\nOne manifest covering `linux/amd64`, `linux/arm64` and `linux/arm/v7` — Docker picks the architecture for you, so a Raspberry Pi and an x86 server run the same command. `1.0.0-beta` was amd64-only.\n\n`arm64` is runtime-verified on real aarch64 hardware: healthcheck, UI, live Open Library search, root-folder scan, a Library Import run and a full discography refresh, no errors. `arm/v7` has only been exercised under emulation, where QEMU's own instruction translator fell over rather than anything in Librarr — treat 32-bit ARM as untested, and please report either way if you run it.\n\n## Added\n\n**Library Import wizard** (Library → Library Import). Point Librarr at a root folder holding books you already have; every folder inside it that no author occupies becomes a row, pre-matched against Open Library with an editable search box where the guess is wrong. Each author is attached to the folder already on disk, so nothing is moved or re-created. Readarr never shipped this page — it was dropped when Readarr forked from Lidarr.\n\n**Rescan button per root folder** (Settings → Media Management), so an existing collection can be picked up without waiting for the scheduled task.\n\n## Fixed\n\n**Author search returned OpenLibrary's ranking unchanged, and the wizard auto-selects the first result.** Searching `Tolkien, J.R.R.` — an ordinary Calibre folder convention — put a 1-work archaeology report ahead of the real 355-work J.R.R. Tolkien, because the report's title happens to contain `(Tolkien, J`. Results are now ranked on name match, with work count only as a bounded tiebreak so a prolific unrelated author can never displace an exact match. Nothing is filtered out; a stub record is demoted, never hidden.\n\n**Same-named authors were impossible to tell apart.** OpenLibrary carries three \"Stephen King\" records — 606 works, 48 works, and 7 works by the author of *Principles of Macroeconomics*. The work count and best-known title were already in the response and were being discarded. The wizard now shows them.\n\n**Interactive search returned HTTP 500 for any book with no monitored edition** — measured at 42% of books in a freshly added library.\n\n**Cover fetches could be rejected by OpenLibrary.** Only the ISBN-keyed form is metered, and only that form is now throttled.\n\n**Docker images were never version-stamped**, so every containerised install was classified as a non-production build.\n\n## Changed\n\nLibrarr now identifies itself honestly to OpenLibrary, Wikidata and Audnex with a real User-Agent carrying app name, version and contact URL, per each service's stated policy.\n\n## No Windows build in this release\n\nThe Windows package needs the `net6.0-windows` target framework, which only publishes from a Windows runner. CI is Linux-only, and `build.sh` skips the package rather than ship one missing `Readarr.Windows.dll`. Windows users should run the Docker image or build from source until a Windows leg is added to the release matrix.\n\n## Installing\n\nVerify downloads against `SHA256SUMS` first. Upgrading an existing Readarr library: mount your old config directory at `/config` and start it — see [`docs/migrating-from-readarr.md`](https://github.com/Rorqualx/Librarr/blob/main/docs/migrating-from-readarr.md). Coming from a folder of books with no database, use the new Library Import wizard instead.\n\nFull detail in [`CHANGELOG.md`](https://github.com/Rorqualx/Librarr/blob/main/CHANGELOG.md).\n"
+  }
+]
