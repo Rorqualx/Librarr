@@ -41,6 +41,12 @@ updates:
       - dependency-name: "System.Data.SQLite.Core.Servarr"
       - dependency-name: "Mono.Posix.NETStandard"
       - dependency-name: "TagLibSharp-Lidarr"
+      # From 3.2.0 on, ImageSharp's build targets refuse a Release build
+      # without a Six Labors licence key ("No Six Labors license found").
+      # Debug builds only warn, so a local build passes and CI fails. Moving
+      # past 3.1.x needs a key in the build, or replacing the library.
+      - dependency-name: "SixLabors.ImageSharp"
+        versions: [">= 3.2.0"]
 
   - package-ecosystem: "npm"
     # package.json + yarn.lock (Yarn 1) at the repository root.
