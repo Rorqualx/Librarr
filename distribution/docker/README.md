@@ -6,13 +6,15 @@ on every `v*` tag push, as a multi-arch manifest covering
 `linux/amd64`, `linux/arm64` and `linux/arm/v7`:
 
 ```bash
-docker pull ghcr.io/rorqualx/librarr:latest    # GitHub Container Registry
-docker pull rorqualx/librarr:latest            # Docker Hub
+docker pull ghcr.io/rorqualx/librarr:beta    # GitHub Container Registry
+docker pull rorqualx/librarr:beta            # Docker Hub
 ```
 
-Tags: `:<version>` exact, `:<major>.<minor>`, `:beta` on beta tags, and
-`:latest` only on non-prerelease tags. Docker will select the right
-architecture for your host automatically.
+Tags: `:<version>` exact (e.g. `:1.2.3-beta`), `:<major>.<minor>`,
+`:beta` on beta tags, and `:latest` only on non-prerelease tags. Every
+release so far is a beta, so **`:latest` has never been published** and
+pulling it fails — it will exist once there is a stable release. Docker
+will select the right architecture for your host automatically.
 
 You can also build locally from this directory — see **Build** below.
 
@@ -22,6 +24,7 @@ You can also build locally from this directory — see **Build** below.
 |---|---|
 | `Dockerfile` | Self-contained multi-stage build: compiles backend (`dotnet publish`) + frontend (`yarn build`) inside the image, then assembles a small runtime layer on `aspnet:10.0-alpine`. No local toolchain required. |
 | `Dockerfile.prebuilt` | Thin packaging layer for when you already ran `./build.sh` and `yarn build` locally — copies `_output/` straight into the runtime image. Fast iteration, but requires the host toolchain. |
+| `entrypoint.sh` | Entrypoint of both images: resolves `PUID`/`PGID`/`UMASK_SET`, takes ownership of `/config`, drops root and execs the app. See **User, permissions and umask** below. |
 
 ## Build
 
@@ -105,19 +108,72 @@ docker run -d \
   -p 8787:8787 \
   -v /path/to/librarr/config:/config \
   -v /path/to/your/library:/books \
-  -v /path/to/downloads/completed:/downloads/completed \
-  librarr/librarr:1.0.0-beta
+  -v /path/to/downloads:/downloads \
+  ghcr.io/rorqualx/librarr:beta
 ```
+
+(Substitute the tag you built — e.g. `librarr/librarr:1.0.0-beta` — to
+run a local build.) The repo-root [`docker-compose.yml`](../../docker-compose.yml)
+is the same thing as a Compose service, with every value overridable
+from a `.env` file.
+
+### User, permissions and umask
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PUID` | `1000` | uid Librarr runs as. |
+| `PGID` | `1000` | gid Librarr runs as. |
+| `UMASK_SET` | `022` | umask for files Librarr creates. `002` makes them group-writable. `UMASK` is accepted as an alias; `UMASK_SET` wins if both are set. |
+| `TZ` | UTC | Time zone, e.g. `America/Denver`. |
+
+The image has no `USER` instruction: by default the container **starts**
+as root, and [`entrypoint.sh`](entrypoint.sh) then
+
+1. applies the umask;
+2. changes the owner of anything under `/config` that is not already
+   `PUID:PGID` (so a `/config` left root-owned by an older image, which
+   ran as root, is fixed on the first start);
+3. drops to `PUID:PGID` with `su-exec` and `exec`s the app, which
+   therefore runs as PID 1 and receives `docker stop`'s SIGTERM directly.
+
+`/books` and `/downloads` are **never** chowned — they can be huge and
+their ownership is yours to decide. If `PUID:PGID` cannot write to one of
+them, the entrypoint logs a warning at start; fix the ownership on the
+host or pick the `PUID`/`PGID` that owns them. Use the same ids as your
+download client so imports can move files.
+
+Alternatively run the container non-root from the outset:
+
+```bash
+docker run -d --user 1000:1000 -e UMASK_SET=002 ... ghcr.io/rorqualx/librarr:beta
+```
+
+With an explicit non-root `--user` (or Compose `user:`, or Kubernetes
+`runAsUser`) the entrypoint does not chown or switch user — it applies
+the umask and execs the app. `PUID`/`PGID` are ignored in this mode, and
+`/config` must already be writable by that uid.
+
+`PUID=0` keeps the app running as root. It is not recommended.
+
+Notes:
+
+- `docker exec librarr <cmd>` still runs as root; add `--user 1000:1000`
+  when touching files under `/config` by hand.
+- Dropping privileges needs the `CHOWN`, `SETUID` and `SETGID`
+  capabilities. If you run with `--cap-drop ALL`, use `--user` instead
+  of `PUID`/`PGID`.
 
 Volume layout the container expects:
 
 | Mount | Purpose |
 |---|---|
-| `/config` | Persistent app data — `config.xml`, `librarr.db`, `Logs/`. |
+| `/config` | Persistent app data — `config.xml`, `readarr.db` (the file name is kept from Readarr on purpose), `logs/`. |
 | `/books` (or whatever you choose) | Your library root. Configure the root folder inside Librarr's UI to match. |
-| `/downloads/completed` | Where your download client(s) drop completed grabs. Configure Remote Path Mappings if the path-as-seen-by-the-download-client differs from the path-as-seen-by-Librarr. |
+| `/downloads` (or whatever you choose) | Where your download client(s) drop completed grabs. Configure Remote Path Mappings if the path-as-seen-by-the-download-client differs from the path-as-seen-by-Librarr. |
 
-Default ports: **8787** HTTP, **6868** HTTPS
+Default ports: **8787** HTTP, **6868** HTTPS (only listening once you
+enable SSL in Librarr; add `-p 6868:6868` then — the Compose file
+publishes both)
 (`src/NzbDrone.Host/Bootstrap.cs:135-136`). Override via `config.xml`
 (`Port`, `SslPort`, `BindAddress`); `config.xml` reload-on-change is
 disabled (`Bootstrap.cs:237`), so changes require a restart.

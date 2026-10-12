@@ -171,13 +171,26 @@ LABEL org.opencontainers.image.title="Librarr" \
       org.opencontainers.image.source="https://github.com/Rorqualx/Librarr" \
       org.opencontainers.image.licenses="GPL-3.0-only"
 
+# su-exec: the entrypoint drops from root to PUID:PGID with it.
+# tzdata: the base image ships no zoneinfo, so without it the documented
+# TZ variable silently resolves to UTC.
+#
+# The three volume roots are created owned by 1000:1000 (the default
+# PUID:PGID) so that the anonymous volumes Docker makes for any of them
+# left unmounted are writable — both in the default start and under
+# `--user 1000:1000`. Everything under /app stays root-owned and
+# read-only to the app.
 RUN apk add --no-cache \
         sqlite-libs \
         icu-libs \
         ca-certificates \
         bash \
         curl \
-    && rm -rf /var/cache/apk/*
+        su-exec \
+        tzdata \
+    && rm -rf /var/cache/apk/* \
+    && mkdir -p /config /books /downloads \
+    && chown 1000:1000 /config /books /downloads
 
 ENV LIBRARR_HOME=/app \
     LIBRARR_DATA=/config \
@@ -197,5 +210,16 @@ EXPOSE 8787 6868
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -fsS http://localhost:${LIBRARR_PORT}/ping || exit 1
 
-ENTRYPOINT ["./Readarr"]
+# The container starts as root on purpose — there is deliberately no USER
+# instruction. The entrypoint needs root for one thing, giving /config to
+# PUID:PGID (default 1000:1000), and then drops to that user with su-exec
+# before exec'ing ./Readarr. Started with an explicit non-root `--user`,
+# it skips all of that and just execs the app. See entrypoint.sh.
+#
+# chmod in a RUN rather than COPY --chmod so the legacy (non-BuildKit)
+# builder still works, and so the mode does not depend on the checkout.
+COPY distribution/docker/entrypoint.sh /usr/local/bin/librarr-entrypoint
+RUN chmod 0755 /usr/local/bin/librarr-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/librarr-entrypoint"]
 CMD ["-nobrowser", "-data=/config"]

@@ -1,12 +1,19 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/dotnet
+//
+// The toolchain here has to satisfy two pins elsewhere in the repo:
+//   - global.json            → .NET SDK 10.0.302, rollForward latestFeature
+//                              (any 10.0.x SDK at or above 10.0.302)
+//   - package.json "engines" → node >=24.0.0, yarn ^1.22.0
+// Use the `2-10.0` image line, not `1-10.0`: the 1.x line stopped at a
+// 10.0 release candidate SDK, which global.json rejects.
 {
-  "name": "Readarr",
-  "image": "mcr.microsoft.com/devcontainers/dotnet:1-6.0",
+  "name": "Librarr",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:2-10.0",
   "features": {
     "ghcr.io/devcontainers/features/node:2": {
       "nodeGypDependencies": true,
-      "version": "16",
+      "version": "24",
       "nvmVersion": "latest"
     }
   },
