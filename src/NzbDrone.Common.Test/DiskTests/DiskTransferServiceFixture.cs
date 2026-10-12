@@ -875,15 +875,15 @@ namespace NzbDrone.Common.Test.DiskTests
 
             Mocker.GetMock<IDiskProvider>()
                 .Setup(v => v.GetDirectoryInfos(It.IsAny<string>()))
-                .Returns<string>(v => fileSystem.DirectoryInfo.FromDirectoryName(v).GetDirectories().ToList());
+                .Returns<string>(v => fileSystem.DirectoryInfo.New(v).GetDirectories().ToList());
 
             Mocker.GetMock<IDiskProvider>()
                 .Setup(v => v.GetFileInfos(It.IsAny<string>(), It.IsAny<bool>()))
-                .Returns((string v, bool recursive) => fileSystem.DirectoryInfo.FromDirectoryName(v).GetFiles("*", new EnumerationOptions { RecurseSubdirectories = recursive }).ToList());
+                .Returns((string v, bool recursive) => fileSystem.DirectoryInfo.New(v).GetFiles("*", new EnumerationOptions { RecurseSubdirectories = recursive }).ToList());
 
             Mocker.GetMock<IDiskProvider>()
                 .Setup(v => v.GetFileSize(It.IsAny<string>()))
-                .Returns<string>(v => fileSystem.FileInfo.FromFileName(v).Length);
+                .Returns<string>(v => fileSystem.FileInfo.New(v).Length);
 
             Mocker.GetMock<IDiskProvider>()
                 .Setup(v => v.TryCreateHardLink(It.IsAny<string>(), It.IsAny<string>()))
