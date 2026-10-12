@@ -483,6 +483,127 @@ jobs:
         shell: bash
         run: bash tests/e2e/smoke.sh
 
+  windows-smoke:
+    # Nothing Windows-specific executed anywhere before this job: every test
+    # job above is ubuntu-22.04, so every WindowsOnly() test (37 call sites)
+    # ignored itself on every run, and release.yml builds the Windows zips and the
+    # installer but only checks that the files exist. Service mode, the
+    # installer and the Windows platform shim had not run once since the move
+    # from .NET 6 to .NET 10.
+    #
+    # Builds on Windows rather than reusing backend-linux, because that
+    # artifact cannot stand in: the tray application targets net10.0-windows
+    # and only publishes from a Windows host, and build.sh's PackageWindows
+    # needs that publish to assemble the folder users actually get. The build
+    # line is the one release.yml's build-windows job uses, so what is tested
+    # here is the shipped layout, not an approximation of it.
+    #
+    # The steps after the build are independent of each other (each runs
+    # unless the build itself failed), so one run reports on all of them.
+    name: Windows smoke
+    needs: variables
+    runs-on: windows-2022
+    timeout-minutes: 75
+    env:
+      READARRVERSION: ${{ needs.variables.outputs.readarrVersion }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build + package win-x64
+        id: build
+        shell: bash
+        # One RID per invocation: under Git Bash a semicolon-separated RID
+        # list does not survive the trip to dotnet.exe (see build.sh).
+        # No frontend: /ping and the API do not need it, and PackageFiles
+        # leaves an empty UI folder in its place.
+        run: ./build.sh --backend --packages -f net10.0 -r win-x64
+
+      - name: Work out the version the binaries should report
+        id: version
+        shell: bash
+        # The same transformation build.sh's UpdateVersionNumber applies
+        # before writing AssemblyVersion.
+        run: echo "assembly=$(echo "$READARRVERSION" | sed 's/-[A-Za-z][A-Za-z0-9]*//')" >> "$GITHUB_OUTPUT"
+
+      - name: Unit tests (Windows)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        env:
+          TEST_DIR: _tests/net10.0/win-x64/publish
+        # test.sh's Windows filter drops Category=LINUX instead of
+        # Category=WINDOWS, and on this host WindowsOnly() fixtures run
+        # instead of ignoring themselves.
+        run: ./test.sh Windows Unit Test
+
+      - name: Smoke - console
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: >
+          ./tests/e2e/windows-smoke.ps1 -Stage console
+          -App _artifacts/win-x64/net10.0/Readarr
+          -ExpectedVersion '${{ steps.version.outputs.assembly }}'
+
+      - name: Smoke - Windows service
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: >
+          ./tests/e2e/windows-smoke.ps1 -Stage service
+          -App _artifacts/win-x64/net10.0/Readarr
+          -ExpectedVersion '${{ steps.version.outputs.assembly }}'
+
+      - name: Smoke - migrate-readarr-folder.ps1
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./tests/e2e/windows-smoke.ps1 -Stage migrate
+
+      - name: Compile the installer
+        id: installer
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        # ISCC directly rather than `build.sh --installer`, which also builds
+        # the win-x86 installer this job has no package for. Inno Setup is
+        # preinstalled on windows-2022.
+        run: |
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw 'Inno Setup 6 (ISCC.exe) is not installed on this runner' }
+          & $iscc distribution\windows\setup\readarr.iss /DFramework=net10.0 /DRuntime=win-x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = Get-ChildItem distribution\windows\setup\output\*-installer.exe | Select-Object -First 1
+          if (-not $exe) { throw 'ISCC succeeded but produced no installer' }
+          "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          Write-Host "$($exe.Name) $([math]::Round($exe.Length / 1MB)) MB"
+
+      - name: Smoke - installer
+        if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
+        shell: pwsh
+        run: >
+          ./tests/e2e/windows-smoke.ps1 -Stage installer
+          -Installer '${{ steps.installer.outputs.path }}'
+          -ExpectedVersion '${{ steps.version.outputs.assembly }}'
+
+      - name: Upload logs and test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-smoke
+          path: |
+            _smoke/
+            TestResult.xml
+            TestLog.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
   integration-tests:
     # `Category=IntegrationTest` ran in no job at all — the unit job
     # excludes it explicitly. In practice that meant HttpClientFixture's

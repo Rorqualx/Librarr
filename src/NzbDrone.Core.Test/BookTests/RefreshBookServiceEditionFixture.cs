@@ -6,7 +6,9 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Books;
+using NzbDrone.Core.Books.Commands;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Test.Framework;
 
@@ -115,7 +117,7 @@ namespace NzbDrone.Core.Test.BookTests
                 .Build();
 
             Mocker.GetMock<IProvideBookInfo>()
-                .Setup(s => s.GetBookInfo(WorkId))
+                .Setup(s => s.GetBookInfo(WorkId, It.IsAny<bool>()))
                 .Returns(Tuple.Create("OL1A", remoteBook, new List<AuthorMetadata>()));
         }
 
@@ -223,6 +225,84 @@ namespace NzbDrone.Core.Test.BookTests
             Refresh();
 
             MonitoredAfterRefresh().Should().Equal(3);
+        }
+
+        // The work bundle is cached for a week. Only a refresh the user asked
+        // for, of this one book, is worth a fresh fetch; everything else
+        // would multiply requests across the library.
+        private void GivenBookInLibrary()
+        {
+            GivenEditions(new List<Edition> { NewEdition(1, "OL1M", true) },
+                          new List<Edition> { NewEdition(0, "OL1M", true) });
+
+            Mocker.GetMock<IBookService>().Setup(s => s.GetBook(_book.Id)).Returns(_book);
+
+            Mocker.GetMock<IBookService>()
+                .Setup(s => s.GetBooks(It.IsAny<IEnumerable<int>>()))
+                .Returns(new List<Book> { _book });
+        }
+
+        private void VerifyBookFetchedFresh(Times times)
+        {
+            Mocker.GetMock<IProvideBookInfo>().Verify(s => s.GetBookInfo(WorkId, false), times);
+        }
+
+        [Test]
+        public void manual_refresh_of_one_book_should_bypass_the_cache()
+        {
+            GivenBookInLibrary();
+
+            Subject.Execute(new RefreshBookCommand(_book.Id) { Trigger = CommandTrigger.Manual });
+
+            // Once: the fresh copy replaces the cached one, so the second
+            // read the refresh makes can take it from there.
+            VerifyBookFetchedFresh(Times.Once());
+            Mocker.GetMock<IProvideBookInfo>().Verify(s => s.GetBookInfo(WorkId, true), Times.Once());
+        }
+
+        [Test]
+        public void manual_refresh_of_one_book_should_not_refetch_the_author()
+        {
+            GivenBookInLibrary();
+
+            Subject.Execute(new RefreshBookCommand(_book.Id) { Trigger = CommandTrigger.Manual });
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetAuthorInfo(It.IsAny<string>(), false), Times.Never());
+        }
+
+        [TestCase(CommandTrigger.Scheduled)]
+        [TestCase(CommandTrigger.Unspecified)]
+        public void refresh_of_one_book_that_the_user_did_not_ask_for_should_use_the_cache(CommandTrigger trigger)
+        {
+            GivenBookInLibrary();
+
+            Subject.Execute(new RefreshBookCommand(_book.Id) { Trigger = trigger });
+
+            VerifyBookFetchedFresh(Times.Never());
+            Mocker.GetMock<IProvideBookInfo>().Verify(s => s.GetBookInfo(WorkId, true), Times.AtLeastOnce());
+        }
+
+        [Test]
+        public void manual_bulk_refresh_should_use_the_cache()
+        {
+            GivenBookInLibrary();
+
+            Subject.Execute(new BulkRefreshBookCommand(new List<int> { _book.Id }) { Trigger = CommandTrigger.Manual });
+
+            VerifyBookFetchedFresh(Times.Never());
+            Mocker.GetMock<IProvideBookInfo>().Verify(s => s.GetBookInfo(WorkId, true), Times.AtLeastOnce());
+        }
+
+        [Test]
+        public void refresh_as_part_of_an_author_should_use_the_cache()
+        {
+            GivenBookInLibrary();
+
+            Refresh();
+
+            VerifyBookFetchedFresh(Times.Never());
+            Mocker.GetMock<IProvideBookInfo>().Verify(s => s.GetBookInfo(WorkId, true), Times.Once());
         }
     }
 }

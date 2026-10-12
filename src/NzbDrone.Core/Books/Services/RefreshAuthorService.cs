@@ -101,11 +101,15 @@ namespace NzbDrone.Core.Books
             _logger = logger;
         }
 
-        private Author GetSkyhookData(string foreignId)
+        // useCache is false only for a refresh the user asked for of one
+        // author: see BypassCache. It reaches no further than the author's own
+        // record and works list. The books are still read through the cache,
+        // or one click would cost a request or more per book.
+        private Author GetSkyhookData(string foreignId, bool useCache)
         {
             try
             {
-                return _authorInfo.GetAuthorInfo(foreignId);
+                return _authorInfo.GetAuthorInfo(foreignId, useCache);
             }
             catch (AuthorNotFoundException)
             {
@@ -491,7 +495,18 @@ namespace NzbDrone.Core.Books
             }
         }
 
-        private void RefreshSelectedAuthors(List<int> authorIds, bool isNew, CommandTrigger trigger)
+        // The source's copy of an author is cached for a day. Someone who has
+        // just corrected the record there and pressed Refresh on that author
+        // expects to see the correction, so that one case asks afresh.
+        // Scheduled runs, the refresh of every author and bulk refreshes keep
+        // the cache: bypassing it there multiplies requests across the library
+        // for data nobody said was stale.
+        private static bool BypassCache(RefreshAuthorCommand message)
+        {
+            return message.AuthorId.HasValue && message.Trigger == CommandTrigger.Manual;
+        }
+
+        private void RefreshSelectedAuthors(List<int> authorIds, bool isNew, CommandTrigger trigger, bool useCache)
         {
             var updated = false;
             var authors = _authorService.GetAuthors(authorIds);
@@ -505,7 +520,7 @@ namespace NzbDrone.Core.Books
 
                 try
                 {
-                    var data = GetSkyhookData(author.ForeignAuthorId);
+                    var data = GetSkyhookData(author.ForeignAuthorId, useCache);
                     updated |= RefreshEntityInfo(author, null, data, true, false, null);
                 }
                 catch (Exception e)
@@ -519,7 +534,7 @@ namespace NzbDrone.Core.Books
 
         public void Execute(BulkRefreshAuthorCommand message)
         {
-            RefreshSelectedAuthors(message.AuthorIds, message.AreNewAuthors, message.Trigger);
+            RefreshSelectedAuthors(message.AuthorIds, message.AreNewAuthors, message.Trigger, useCache: true);
         }
 
         public void Execute(RefreshAuthorCommand message)
@@ -529,7 +544,7 @@ namespace NzbDrone.Core.Books
 
             if (message.AuthorId.HasValue)
             {
-                RefreshSelectedAuthors(new List<int> { message.AuthorId.Value }, isNew, trigger);
+                RefreshSelectedAuthors(new List<int> { message.AuthorId.Value }, isNew, trigger, useCache: !BypassCache(message));
             }
             else
             {
@@ -563,7 +578,7 @@ namespace NzbDrone.Core.Books
                         try
                         {
                             LogProgress(author);
-                            var data = GetSkyhookData(author.ForeignAuthorId);
+                            var data = GetSkyhookData(author.ForeignAuthorId, useCache: true);
                             updated |= RefreshEntityInfo(author, null, data, manualTrigger, false, message.LastStartTime);
                         }
                         catch (Exception e)

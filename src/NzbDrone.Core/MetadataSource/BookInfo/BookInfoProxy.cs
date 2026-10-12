@@ -123,7 +123,9 @@ namespace NzbDrone.Core.MetadataSource.BookInfo
             return null;
         }
 
-        public Tuple<string, Book, List<AuthorMetadata>> GetBookInfo(string foreignBookId)
+        // useCache is accepted for IProvideBookInfo and has nothing to switch
+        // off here: PollBook asks the server every time.
+        public Tuple<string, Book, List<AuthorMetadata>> GetBookInfo(string foreignBookId, bool useCache = true)
         {
             try
             {

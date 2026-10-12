@@ -363,8 +363,18 @@ namespace NzbDrone.Core.MediaFiles.BookImport
             foreach (var bookImport in bookImports)
             {
                 var book = bookImport.First().ImportDecision.Item.Book;
-                var edition = book.Editions.Value.Single(x => x.Monitored);
+                var edition = book.PrimaryEdition();
                 var author = bookImport.First().ImportDecision.Item.Author;
+
+                // The event reports the files against an edition. Without one
+                // there is nothing to report for this book, but that is this
+                // book's problem only: throwing here used to lose the caller
+                // the results for every file in the batch, imported or not.
+                if (edition == null)
+                {
+                    _logger.Warn("Book {0} has no editions, so no import notification is sent for it. Refresh the book to fetch its editions", book);
+                    continue;
+                }
 
                 if (bookImport.Where(e => e.Errors.Count == 0).ToList().Count > 0 && author != null && book != null)
                 {

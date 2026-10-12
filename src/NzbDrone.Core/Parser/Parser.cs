@@ -356,10 +356,9 @@ namespace NzbDrone.Core.Parser
                 simpleTitle = CleanTorrentSuffixRegex.Replace(simpleTitle);
 
                 var bestBook = books
-                    .OrderByDescending(x => simpleTitle.FuzzyMatch(x.Editions.Value.Single(x => x.Monitored).Title, wordDelimiters: WordDelimiters))
-                    .First()
-                    .Editions.Value
-                    .Single(x => x.Monitored);
+                    .OrderByDescending(x => simpleTitle.FuzzyMatch(x.PrimaryEdition()?.Title ?? x.Title, wordDelimiters: WordDelimiters))
+                    .Select(x => x.PrimaryEdition() ?? new Edition { Title = x.Title })
+                    .First();
 
                 var foundAuthor = GetTitleFuzzy(simpleTitle, authorName, out var remainder);
 

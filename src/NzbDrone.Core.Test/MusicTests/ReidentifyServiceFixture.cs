@@ -123,6 +123,26 @@ namespace NzbDrone.Core.Test.MusicTests
         }
 
         [Test]
+        public void should_treat_a_response_cut_off_mid_body_as_unreachable()
+        {
+            var torn = new WebException("Failed to read complete http response", null, WebExceptionStatus.ReceiveFailure, null);
+
+            ReidentifyService.IsSourceUnreachable(torn).Should().BeTrue();
+        }
+
+        // The one WebException that is an answer: the status it carries when
+        // there was a response, such as a redirect chain that never ends. The
+        // source is reachable and wrong about that record, so the item was
+        // tried. IsSourceUnreachable used to count every WebException.
+        [Test]
+        public void should_not_treat_a_protocol_error_as_unreachable()
+        {
+            var redirectLoop = new WebException("Too many automatic redirections were attempted", null, WebExceptionStatus.ProtocolError, null);
+
+            ReidentifyService.IsSourceUnreachable(redirectLoop).Should().BeFalse();
+        }
+
+        [Test]
         public void should_treat_a_refused_connection_as_unreachable()
         {
             ReidentifyService.IsSourceUnreachable(new HttpRequestException("Connection refused")).Should().BeTrue();

@@ -103,17 +103,17 @@ namespace NzbDrone.Core.MetadataSource
                 : _bookInfo.GetChangedAuthors(startTime);
 
         // IProvideBookInfo
-        public Tuple<string, Book, List<AuthorMetadata>> GetBookInfo(string id)
+        public Tuple<string, Book, List<AuthorMetadata>> GetBookInfo(string id, bool useCache = true)
         {
             if (!IsOpenLibrary)
             {
-                return _bookInfo.GetBookInfo(id);
+                return _bookInfo.GetBookInfo(id, useCache);
             }
 
             var olWorkId = TranslateBookToOpenLibrary(id);
             var lookupId = olWorkId ?? id;
 
-            var result = _openLibrary.GetBookInfo(lookupId);
+            var result = _openLibrary.GetBookInfo(lookupId, useCache);
 
             return olWorkId != null
                 ? RestoreLocalIdentityOnBookInfo(result, originalForeignBookId: id)
@@ -166,6 +166,13 @@ namespace NzbDrone.Core.MetadataSource
                    foreignBookId.IsNotNullOrWhiteSpace() &&
                    !OpenLibraryIdHelper.IsWorkId(foreignBookId) &&
                    TranslateBookToOpenLibrary(foreignBookId) == null;
+        }
+
+        public bool IsLegacyBook(string foreignBookId)
+        {
+            return IsOpenLibrary &&
+                   foreignBookId.IsNotNullOrWhiteSpace() &&
+                   !OpenLibraryIdHelper.IsWorkId(foreignBookId);
         }
 
         public bool IsUnmappedLegacyAuthor(string foreignAuthorId)

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
-using System.Net;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
@@ -123,10 +122,10 @@ namespace NzbDrone.Core.Books
 
         public static bool IsSourceUnreachable(Exception ex)
         {
-            // WebException is what the HTTP dispatcher raises for a timeout
-            // or a response cut off mid-body.
+            // The breaker's own "not asking" is unreachable too, though it is
+            // not a failure the breaker should count. For everything else
+            // there is one definition of "no answer", and it is not ours.
             return ex is MetadataSourceUnavailableException ||
-                   ex is WebException ||
                    MetadataSourceStatusService.IndicatesUnavailable(ex);
         }
 
