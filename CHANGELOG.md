@@ -156,6 +156,13 @@ several defaults are different.
   of the book was missing from disk. It now looks only at files of the
   release's own format.
 
+- **The API key in `config.xml` could differ from the one the server
+  accepted after a first start.** Two parts of the app rewrote the file at
+  the same moment on a first-ever start, so the key could be missing from
+  the file or be a different one, and anything that read it got 401 until
+  Librarr was restarted. Found by the new Windows CI job; not specific to
+  Windows.
+
 - **Low-confidence mapping page.** It listed authors as books, saved ids
   without validating them, made one request per row and showed nothing when a
   row failed. It now distinguishes authors from books, validates the id,
