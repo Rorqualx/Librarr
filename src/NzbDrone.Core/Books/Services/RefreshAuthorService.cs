@@ -46,6 +46,7 @@ namespace NzbDrone.Core.Books
         private readonly IMonitorNewBookService _monitorNewBookService;
         private readonly IConfigService _configService;
         private readonly IImportListExclusionService _importListExclusionService;
+        private readonly IIdentifyUnmappedLegacyBooks _legacyItems;
         private readonly Logger _logger;
 
         // Each author's LastInfoSync as it stood when the refresh in progress
@@ -77,6 +78,7 @@ namespace NzbDrone.Core.Books
                                     IMonitorNewBookService monitorNewBookService,
                                     IConfigService configService,
                                     IImportListExclusionService importListExclusionService,
+                                    IIdentifyUnmappedLegacyBooks legacyItems,
                                     Logger logger)
         : base(logger, authorMetadataService)
         {
@@ -95,6 +97,7 @@ namespace NzbDrone.Core.Books
             _monitorNewBookService = monitorNewBookService;
             _configService = configService;
             _importListExclusionService = importListExclusionService;
+            _legacyItems = legacyItems;
             _logger = logger;
         }
 
@@ -110,6 +113,23 @@ namespace NzbDrone.Core.Books
             }
 
             return null;
+        }
+
+        // An author imported from Readarr whose id cannot be translated: not
+        // matched yet, or matched only by a guess the user has not confirmed.
+        // The source would be asked for an id it has never heard of and the
+        // refresh would fail with an error on every run, so say once why it
+        // is not happening and leave the author and its books alone.
+        private bool IsWaitingForMapping(Author author)
+        {
+            if (!_legacyItems.IsUnmappedLegacyAuthor(author.ForeignAuthorId))
+            {
+                return false;
+            }
+
+            _logger.Info("Skipping refresh of author {0}: it still has its Readarr id and no confirmed OpenLibrary match. Nothing of it is changed or removed; confirm or correct its match on the low-confidence mappings page, or run Reidentify Library", author);
+
+            return true;
         }
 
         protected override RemoteData GetRemoteData(Author local, List<Author> remote, Author data)
@@ -478,6 +498,11 @@ namespace NzbDrone.Core.Books
 
             foreach (var author in authors)
             {
+                if (IsWaitingForMapping(author))
+                {
+                    continue;
+                }
+
                 try
                 {
                     var data = GetSkyhookData(author.ForeignAuthorId);
@@ -530,6 +555,11 @@ namespace NzbDrone.Core.Books
                         (updatedGoodreadsAuthors != null && updatedGoodreadsAuthors.Contains(author.ForeignAuthorId)) ||
                         manualTrigger)
                     {
+                        if (IsWaitingForMapping(author))
+                        {
+                            continue;
+                        }
+
                         try
                         {
                             LogProgress(author);

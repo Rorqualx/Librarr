@@ -120,6 +120,44 @@ namespace NzbDrone.Core.Test.MusicTests
                 .Returns((Author a) => a);
         }
 
+        // Imported from Readarr and not matched, or matched only by a guess
+        // nobody has confirmed. Asking the source for its id fails, and did
+        // so with an error on every run.
+        [Test]
+        public void should_skip_an_author_whose_legacy_id_has_no_confirmed_mapping()
+        {
+            Mocker.GetMock<IIdentifyUnmappedLegacyBooks>()
+                .Setup(s => s.IsUnmappedLegacyAuthor(_author.ForeignAuthorId))
+                .Returns(true);
+
+            Subject.Execute(new RefreshAuthorCommand(_author.Id));
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetAuthorInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+
+            Mocker.GetMock<IAuthorService>()
+                .Verify(s => s.DeleteAuthor(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never());
+
+            VerifyEventNotPublished<AuthorRefreshCompleteEvent>();
+        }
+
+        [Test]
+        public void should_skip_such_an_author_in_the_scheduled_refresh_of_everyone()
+        {
+            Mocker.GetMock<IAuthorService>()
+                .Setup(s => s.GetAllAuthors())
+                .Returns(new List<Author> { _author });
+
+            Mocker.GetMock<IIdentifyUnmappedLegacyBooks>()
+                .Setup(s => s.IsUnmappedLegacyAuthor(_author.ForeignAuthorId))
+                .Returns(true);
+
+            Subject.Execute(new RefreshAuthorCommand { Trigger = CommandTrigger.Manual });
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetAuthorInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
         [Test]
         public void should_not_publish_author_updated_event_if_metadata_not_updated()
         {
