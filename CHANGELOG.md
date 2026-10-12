@@ -7,6 +7,13 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.2.4-beta] — 2026-10-11
+
+The fixes from a full audit of the fork: security hardening, the Readarr
+migration path, OpenLibrary handling, PostgreSQL, Windows and the Docker
+image. Read the bold lines under Security and Changed before upgrading;
+several defaults are different.
+
 ### Security
 
 - **Librarr no longer talks to the retired Readarr project's servers.**
@@ -57,6 +64,13 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 - **Windows installer:** the install folder's permissions are locked down to
   administrators and the service account, and the installer no longer removes
   an existing Readarr service unless run with `/REPLACESERVICE=1`.
+
+- **The Goodreads notifications are removed.** "Goodreads Bookshelf" and
+  "Goodreads Owned Books" posted Goodreads book ids, which a library on
+  OpenLibrary does not have, and their sign-in went through
+  `auth.servarr.com`, a server of the retired upstream project. **A saved
+  notification of either type is deleted at startup**, with a `Removing`
+  line in the log.
 
 - **Dependency advisories:** frontend npm advisories went from 6 high and 11
   moderate to none. MailKit/MimeKit, the JWT packages and ImageSharp were
@@ -129,6 +143,18 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
   merged away; one book that cannot be fetched no longer fails the whole
   author; legacy authors with no mapping are skipped with a log line instead
   of being refreshed against the wrong record.
+
+- **Readarr migration: a wrong author match could delete books.** A book
+  that came from Readarr is listed by OpenLibrary only if its author and work
+  were matched correctly. A confident but wrong match left the author's books
+  off the list, and the next refresh removed every one that had no files.
+  Books that still carry a Readarr id are now never removed for being missing
+  from the source; removing one is up to you.
+
+- **A missing ebook file blocked audiobook grabs, and the other way round.**
+  With "unmonitor deleted books" on, RSS sync rejected a release if any file
+  of the book was missing from disk. It now looks only at files of the
+  release's own format.
 
 - **Low-confidence mapping page.** It listed authors as books, saved ids
   without validating them, made one request per row and showed nothing when a
@@ -923,7 +949,8 @@ fork's code-level inventory.
 - Internal `Readarr.*` csproj rename / `NzbDrone.*` namespace
   rebrand (deliberately preserved).
 
-[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.3-beta...HEAD
+[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.4-beta...HEAD
+[1.2.4-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.3-beta...v1.2.4-beta
 [1.2.3-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.2-beta...v1.2.3-beta
 [1.2.2-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.1-beta...v1.2.2-beta
 [1.2.1-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.0-beta...v1.2.1-beta

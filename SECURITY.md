@@ -3,7 +3,7 @@
 ## Supported versions
 
 Librarr is in beta, and only the most recent release is patched. That
-is `1.2.3-beta` as of 2026-10-11 — earlier tags, `1.2.2-beta`, `1.2.1-beta`,
+is `1.2.4-beta` as of 2026-10-11 — earlier tags, `1.2.3-beta`, `1.2.2-beta`, `1.2.1-beta`,
 `1.2.0-beta`, `1.1.0-beta` and `1.0.0-beta` included, get nothing. Check the [releases page][releases] rather than trusting
 this line to have stayed current.
 
