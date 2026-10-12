@@ -3,10 +3,24 @@ using Newtonsoft.Json;
 
 namespace NzbDrone.Core.MetadataSource.OpenLibrary.Resources
 {
-    public class OpenLibraryAuthorResource
+    public class OpenLibraryAuthorResource : IOpenLibraryDocument
     {
         // "/authors/OL5749351A"
         public string Key { get; set; }
+
+        // "/type/author" for a live record. A record that was merged into
+        // another is served -- with a 200 -- as "/type/redirect", and a removed
+        // one as "/type/delete"; neither carries a name. See
+        // OpenLibraryDocumentType.
+        [JsonConverter(typeof(OpenLibraryKeyOrStringConverter))]
+        public string Type { get; set; }
+
+        // On a redirect document, the key of the surviving record
+        // ("/authors/OL2A"). Careful: on a live author this same field is
+        // free text for where they lived, so it only means "go here" when
+        // Type says redirect.
+        [JsonConverter(typeof(OpenLibraryKeyOrStringConverter))]
+        public string Location { get; set; }
 
         public string Name { get; set; }
 
