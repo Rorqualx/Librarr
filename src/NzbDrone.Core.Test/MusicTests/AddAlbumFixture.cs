@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using FluentValidation;
@@ -105,6 +106,41 @@ namespace NzbDrone.Core.Test.MusicTests
             Assert.Throws<ValidationException>(() => Subject.AddBook(newBook));
 
             ExceptionVerification.ExpectedErrors(1);
+        }
+
+        // An OpenLibrary search result has no edition key, only the work's.
+        // The book must start on the edition the source picked, not on
+        // whichever edition it happens to list first.
+        [Test]
+        public void should_monitor_the_sources_pick_when_the_search_result_named_no_real_edition()
+        {
+            var newBook = BookToAdd("book", "book", "author");
+
+            GivenValidBook("book", "first-listed");
+            GivenValidPath();
+
+            _fakeBook.Editions.Value[0].Monitored = false;
+            _fakeBook.Editions.Value.Add(new Edition { ForeignEditionId = "source-pick", Monitored = true });
+
+            var book = Subject.AddBook(newBook);
+
+            book.Editions.Value.Where(x => x.Monitored).Select(x => x.ForeignEditionId).Should().Equal("source-pick");
+        }
+
+        [Test]
+        public void should_monitor_the_edition_the_search_result_named()
+        {
+            var newBook = BookToAdd("first-listed", "book", "author");
+
+            GivenValidBook("book", "first-listed");
+            GivenValidPath();
+
+            _fakeBook.Editions.Value[0].Monitored = false;
+            _fakeBook.Editions.Value.Add(new Edition { ForeignEditionId = "source-pick", Monitored = true });
+
+            var book = Subject.AddBook(newBook);
+
+            book.Editions.Value.Where(x => x.Monitored).Select(x => x.ForeignEditionId).Should().Equal("first-listed");
         }
     }
 }

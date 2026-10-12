@@ -216,8 +216,17 @@ namespace Readarr.Api.V1.Books
         public ActionResult<BookResource> UpdateBook([FromBody] BookResource bookResource)
         {
             var book = _bookService.GetBook(bookResource.Id);
+            var previouslyMonitored = book.Editions.Value.Where(x => x.Monitored).Select(x => x.Id).ToHashSet();
 
             var model = bookResource.ToModel(book);
+
+            // Changing which edition is monitored is the user choosing one.
+            // Mark it so a refresh keeps it instead of putting the metadata
+            // source's own pick back.
+            foreach (var chosen in model.Editions.Value.Where(x => x.Monitored && !previouslyMonitored.Contains(x.Id)))
+            {
+                chosen.ManualAdd = true;
+            }
 
             _bookService.UpdateBook(model);
             _editionService.UpdateMany(model.Editions.Value);
