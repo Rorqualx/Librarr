@@ -387,7 +387,10 @@ namespace NzbDrone.Core.Books
                 var authors = _authorService.GetAllAuthors().OrderBy(c => c.Name).ToList();
                 var authorIds = authors.Select(x => x.Id).ToList();
 
-                var updatedGoodreadsAuthors = new HashSet<string>();
+                // Null means "no change list to go by": refresh whoever is due.
+                // It must start null, not empty, or a run that is too old to
+                // ask the source for changes would refresh nobody.
+                HashSet<string> updatedGoodreadsAuthors = null;
 
                 if (message.LastExecutionTime.HasValue && message.LastExecutionTime.Value.AddDays(14) > DateTime.UtcNow)
                 {

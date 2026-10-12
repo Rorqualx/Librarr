@@ -1,6 +1,10 @@
+using System;
+using System.Net;
+using System.Net.Http;
 using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Core.Books;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Test.Common;
 
 namespace NzbDrone.Core.Test.MusicTests
@@ -100,5 +104,34 @@ namespace NzbDrone.Core.Test.MusicTests
             Confidence = 0.97,
             Source = BookIdMappingSource.FileTag
         };
+
+        // A lookup the source never answered leaves that item untried, so
+        // the run must not count as finished. A "no such record" answer is
+        // a real result and must not make it fail.
+        [Test]
+        public void should_treat_an_open_circuit_breaker_as_unreachable()
+        {
+            ReidentifyService.IsSourceUnreachable(new MetadataSourceUnavailableException("cooling down")).Should().BeTrue();
+        }
+
+        [Test]
+        public void should_treat_a_timeout_as_unreachable()
+        {
+            var timeout = new WebException("Http request timed out", null, WebExceptionStatus.Timeout, null);
+
+            ReidentifyService.IsSourceUnreachable(timeout).Should().BeTrue();
+        }
+
+        [Test]
+        public void should_treat_a_refused_connection_as_unreachable()
+        {
+            ReidentifyService.IsSourceUnreachable(new HttpRequestException("Connection refused")).Should().BeTrue();
+        }
+
+        [Test]
+        public void should_not_treat_an_ordinary_failure_as_unreachable()
+        {
+            ReidentifyService.IsSourceUnreachable(new InvalidOperationException("Sequence contains no elements")).Should().BeFalse();
+        }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using FizzWare.NBuilder;
 using Moq;
@@ -10,6 +11,7 @@ using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.History;
 using NzbDrone.Core.ImportLists.Exclusions;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Profiles.Metadata;
 using NzbDrone.Core.RootFolders;
@@ -321,6 +323,79 @@ namespace NzbDrone.Core.Test.MusicTests
                 .Verify(v => v.UpdateMany(It.Is<List<Book>>(x => x.Count == _books.Count)));
 
             ExceptionVerification.ExpectedWarns(1);
+        }
+
+        private void GivenScheduledRefreshOfDueAuthor()
+        {
+            var newAuthorInfo = _author.JsonClone();
+            newAuthorInfo.Metadata = _author.Metadata.Value.JsonClone();
+            newAuthorInfo.Books = _remoteBooks;
+
+            GivenNewAuthorInfo(newAuthorInfo);
+            GivenBooksForRefresh(_books);
+            AllowAuthorUpdate();
+
+            Mocker.GetMock<IAuthorService>(MockBehavior.Strict)
+                .Setup(s => s.GetAllAuthors())
+                .Returns(new List<Author> { _author });
+
+            Mocker.GetMock<ICheckIfAuthorShouldBeRefreshed>()
+                .Setup(s => s.ShouldRefresh(_author))
+                .Returns(true);
+        }
+
+        private static RefreshAuthorCommand ScheduledCommand(int daysSinceLastRun)
+        {
+            return new RefreshAuthorCommand
+            {
+                Trigger = CommandTrigger.Scheduled,
+                LastExecutionTime = DateTime.UtcNow.AddDays(-daysSinceLastRun),
+                LastStartTime = DateTime.UtcNow.AddDays(-daysSinceLastRun)
+            };
+        }
+
+        [Test]
+        public void scheduled_refresh_should_refresh_due_authors_when_source_has_no_change_feed()
+        {
+            GivenScheduledRefreshOfDueAuthor();
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Setup(s => s.GetChangedAuthors(It.IsAny<DateTime>()))
+                .Returns((HashSet<string>)null);
+
+            Subject.Execute(ScheduledCommand(1));
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetAuthorInfo(_author.ForeignAuthorId, true), Times.Once());
+        }
+
+        [Test]
+        public void scheduled_refresh_should_refresh_due_authors_when_last_run_is_too_old_to_ask_for_changes()
+        {
+            GivenScheduledRefreshOfDueAuthor();
+
+            Subject.Execute(ScheduledCommand(30));
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetChangedAuthors(It.IsAny<DateTime>()), Times.Never());
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetAuthorInfo(_author.ForeignAuthorId, true), Times.Once());
+        }
+
+        [Test]
+        public void scheduled_refresh_should_skip_authors_the_change_feed_does_not_list()
+        {
+            GivenScheduledRefreshOfDueAuthor();
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Setup(s => s.GetChangedAuthors(It.IsAny<DateTime>()))
+                .Returns(new HashSet<string>());
+
+            Subject.Execute(ScheduledCommand(1));
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Verify(s => s.GetAuthorInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
         }
     }
 }

@@ -69,6 +69,7 @@ namespace NzbDrone.Core.Configuration
         string MetadataSource { get; set; }
         string MetadataSourceType { get; set; }
         bool LegacyMigrationCompleted { get; set; }
+        bool LegacyMigrationStarted { get; set; }
         int LegacyMigrationVersion { get; set; }
         bool AugmentAudiobookMetadata { get; set; }
         WriteAudioTagsType WriteAudioTags { get; set; }
