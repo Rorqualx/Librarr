@@ -11,13 +11,16 @@ fresh per the README.
 2. **Stop the Readarr service** (or quit the tray app on Windows /
    macOS). Migrating with the DB held open by Readarr causes silent
    half-writes.
-3. **Install Librarr** alongside Readarr (the installer uses a fresh
-   GUID, so the two coexist).
-4. **Give Librarr access to your existing data folder.** Pick one of
+3. **Give Librarr access to your existing data folder.** Pick one of
    the two recipes below (see *Data folder location*). The short
-   version: either copy `…/Readarr/` to `…/Librarr/`, or start
-   Librarr with `--appdata=/path/to/your/Readarr` and let it adopt
-   the existing folder in place.
+   version: either copy `…/Readarr/` to `…/Librarr/` — **before**
+   the Windows installer or Librarr's first start creates that
+   folder — or start Librarr with `-data=/path/to/your/Readarr` and
+   let it adopt the existing folder in place.
+4. **Install Librarr.** It installs to its own folder and Windows
+   lists it separately from Readarr, so the two sets of files sit
+   side by side. The Windows *service* is the exception: see
+   *Windows: one service, not two* below.
 5. **Open Settings → Metadata → Switch Metadata Source** and click
    *Start reidentify*. The wizard remaps every Goodreads ID to its OL
    equivalent and stores the mapping in the new `BookIdMapping` table.
@@ -50,8 +53,12 @@ folder needs renaming.
 
 ### Recipe A — copy the folder (recommended)
 
-Run while both apps are stopped. Pick the path for your OS from the
-table above.
+Run while both apps are stopped, and **before the `Librarr` folder
+exists**: on Windows that means before running the Librarr installer
+(it installs into `C:\ProgramData\Librarr`, so the folder is there as
+soon as setup finishes); everywhere it means before starting Librarr
+for the first time (which creates the folder with an empty database).
+Pick the path for your OS from the table above.
 
 ```bash
 # Linux / macOS
@@ -84,9 +91,18 @@ Both scripts accept `--src=…` / `-Src` and `--dst=…` / `-Dst` if
 your folders live somewhere non-default. `--force` / `-Force` skips
 the running-process check + interactive prompt for scripted runs.
 
-Start Librarr. It picks up the copied folder on first launch — same
-DB, same library, same indexers, same download clients. Readarr's
-folder is left untouched so you can roll back to it if needed.
+If `Librarr` already exists, the scripts stop with "destination
+already exists" and the plain commands above do something worse: they
+nest the copy as `Librarr/Readarr`, which Librarr never looks at. Stop
+Librarr and move the folder out of the way first. On Windows that
+folder also holds the program (`bin\`), so run the installer again
+after the copy.
+
+Then install Librarr (Windows) and start it. It picks up the copied
+folder on first launch — same DB, same library, same indexers, same
+download clients. On Windows the copy brings Readarr's `bin\` along;
+the installer replaces it. Readarr's folder is left untouched so you
+can roll back to it if needed.
 
 ### Recipe B — point Librarr at the existing folder
 
@@ -94,13 +110,17 @@ Don't copy anything; just tell Librarr where to look:
 
 ```bash
 # Linux / macOS — service unit, launchd plist, or just the shell
-ExecStart=/usr/bin/Librarr --appdata=/home/you/.config/Readarr
+ExecStart=/usr/bin/Librarr -data=/home/you/.config/Readarr
 ```
 
 ```powershell
 # Windows service (sc.exe binPath, or via NSSM args)
---appdata="C:\ProgramData\Readarr"
+-data="C:\ProgramData\Readarr"
 ```
+
+The argument is `-data=` (`/data=` also works). `--appdata=` is not an
+argument Librarr knows; it is ignored without complaint and Librarr
+opens the default `Librarr` folder instead.
 
 This is the lowest-friction option but means Librarr and Readarr
 share a single state directory. **Never run both apps at the same
@@ -114,8 +134,26 @@ Update the `ExecStart=` line in the systemd unit (Linux), the
 `Program` / `ProgramArguments` keys in the launchd plist (macOS),
 or the binary path in `services.msc` (Windows) so the service runs
 the Librarr executable. Whichever recipe you picked above, the
-`--appdata` argument (or its absence) determines which folder
+`-data=` argument (or its absence) determines which folder
 Librarr opens.
+
+### Windows: one service, not two
+
+Librarr registers its Windows service under the name **`Readarr`**,
+the same name stock Readarr uses (kept so an existing Librarr install
+upgrades in place). Windows allows one service per name, so the two
+apps cannot both be installed as services: the installer's *Windows
+Service* option replaces Readarr's service with Librarr's.
+
+Installers up to and including 1.2.3-beta go further and remove an
+existing `Readarr` service during setup without asking, whether or not
+you pick that option. If your installer instead asks before replacing
+a service that is not its own, an unattended install needs
+`/REPLACESERVICE=1` to say yes.
+
+Readarr's files and data folder are not touched either way. To go
+back, uninstall Librarr's service and reinstall Readarr's from its own
+folder (`C:\ProgramData\Readarr\bin\Readarr.Console.exe /i`).
 
 ## If you only have the books, not the config folder
 
@@ -235,7 +273,7 @@ path. The simplest rollback is:
 3. Once you've confirmed Readarr is healthy, delete the
    `~/.config/Librarr/` copy at your leisure.
 
-### From Recipe B (shared `--appdata` folder)
+### From Recipe B (shared `-data=` folder)
 
 Librarr and Readarr have been writing to the same DB. To revert the
 metadata routing without losing post-migration changes:
@@ -243,7 +281,7 @@ metadata routing without losing post-migration changes:
 1. Stop Librarr.
 2. In `config.xml`, set `MetadataSourceType` to `BookInfo`.
    (Or do this from Settings → Metadata in the UI before stopping.)
-3. Start Readarr against the same `--appdata` folder. Switching the
+3. Start Readarr against the same folder. Switching the
    metadata-source pointer reverses the routing; the
    `BookIdMapping` table stays on disk but isn't consulted.
 4. *Optional* — drop the BookIdMapping schema entirely with the
