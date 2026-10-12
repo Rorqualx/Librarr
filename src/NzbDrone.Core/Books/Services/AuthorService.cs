@@ -14,10 +14,12 @@ namespace NzbDrone.Core.Books
     {
         Author GetAuthor(int authorId);
         Author GetAuthorByMetadataId(int authorMetadataId);
+        List<Author> GetAuthorsByMetadataId(IEnumerable<int> authorMetadataIds);
         List<Author> GetAuthors(IEnumerable<int> authorIds);
         Author AddAuthor(Author newAuthor, bool doRefresh);
         List<Author> AddAuthors(List<Author> newAuthors, bool doRefresh);
         Author FindById(string foreignAuthorId);
+        List<Author> FindByIds(IEnumerable<string> foreignAuthorIds);
         Author FindByName(string title);
         Author FindByNameInexact(string title);
         List<Author> GetCandidates(string title);
@@ -88,6 +90,11 @@ namespace NzbDrone.Core.Books
         public Author FindById(string foreignAuthorId)
         {
             return _authorRepository.FindById(foreignAuthorId);
+        }
+
+        public List<Author> FindByIds(IEnumerable<string> foreignAuthorIds)
+        {
+            return _authorRepository.FindByIds(foreignAuthorIds);
         }
 
         public Author FindByName(string title)
@@ -210,6 +217,11 @@ namespace NzbDrone.Core.Books
         public Author GetAuthorByMetadataId(int authorMetadataId)
         {
             return _authorRepository.GetAuthorByMetadataId(authorMetadataId);
+        }
+
+        public List<Author> GetAuthorsByMetadataId(IEnumerable<int> authorMetadataIds)
+        {
+            return _authorRepository.GetAuthorsByMetadataId(authorMetadataIds);
         }
 
         public List<Author> GetAuthors(IEnumerable<int> authorIds)

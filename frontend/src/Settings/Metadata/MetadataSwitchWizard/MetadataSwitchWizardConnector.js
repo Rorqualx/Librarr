@@ -3,35 +3,49 @@ import React, { Component } from 'react';
 import { connect } from 'react-redux';
 import { createSelector } from 'reselect';
 import * as commandNames from 'Commands/commandNames';
-import { executeCommand } from 'Store/Actions/commandActions';
-import createCommandExecutingSelector from 'Store/Selectors/createCommandExecutingSelector';
+import { executeCommandHelper } from 'Store/Actions/commandActions';
+import createCommandSelector from 'Store/Selectors/createCommandSelector';
+import { isCommandExecuting, isCommandFailed } from 'Utilities/Command';
 import MetadataSwitchWizard from './MetadataSwitchWizard';
 
 function createMapStateToProps() {
   return createSelector(
-    createCommandExecutingSelector(commandNames.REIDENTIFY_LIBRARY),
-    (isReidentifying) => {
+    createCommandSelector(commandNames.REIDENTIFY_LIBRARY),
+    (command) => {
       return {
-        isReidentifying
+        isReidentifying: isCommandExecuting(command),
+        isReidentifyFailed: isCommandFailed(command)
       };
     }
   );
 }
 
-const mapDispatchToProps = {
-  executeCommand
-};
+// executeCommandHelper rather than the executeCommand thunk: the thunk
+// discards the request, and the wizard has to know when the POST itself
+// fails or it waits forever on a command that was never queued.
+function createMapDispatchToProps(dispatch) {
+  return {
+    dispatchExecuteReidentify() {
+      return executeCommandHelper({ name: commandNames.REIDENTIFY_LIBRARY }, dispatch);
+    }
+  };
+}
 
 class MetadataSwitchWizardConnector extends Component {
 
   onStartReidentify = () => {
-    this.props.executeCommand({ name: commandNames.REIDENTIFY_LIBRARY });
+    return this.props.dispatchExecuteReidentify();
   };
 
   render() {
+    const {
+      dispatchExecuteReidentify,
+      ...otherProps
+    } = this.props;
+
     return (
       <MetadataSwitchWizard
-        {...this.props}
+        {...otherProps}
         onStartReidentify={this.onStartReidentify}
       />
     );
@@ -40,7 +54,9 @@ class MetadataSwitchWizardConnector extends Component {
 
 MetadataSwitchWizardConnector.propTypes = {
   isReidentifying: PropTypes.bool.isRequired,
-  executeCommand: PropTypes.func.isRequired
+  isReidentifyFailed: PropTypes.bool.isRequired,
+  dispatchExecuteReidentify: PropTypes.func.isRequired,
+  onReidentifyFinished: PropTypes.func
 };
 
-export default connect(createMapStateToProps, mapDispatchToProps)(MetadataSwitchWizardConnector);
+export default connect(createMapStateToProps, createMapDispatchToProps)(MetadataSwitchWizardConnector);
