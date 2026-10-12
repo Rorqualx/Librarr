@@ -91,6 +91,31 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary.Mappers
         private static Book ToBook(OpenLibrarySearchDoc doc)
         {
             var key = ExtractKey(doc.Key);
+
+            // A search document is a work, and its `isbn` array is the ISBNs of
+            // every edition of that work: 187 entries for Dune in the captured
+            // search_dune_herbert.json. This used to take the first
+            // 13-character one and set it as the placeholder edition's Isbn13,
+            // which is the hazard OpenLibraryEditionMapper.SelectIsbn13 was
+            // written to avoid, on a much larger scale: a file tagged with any
+            // of the other 186 scored the 10.0-weight isbn bucket at distance
+            // 1 against the correct work (0.6250 normalised, against a 0.20
+            // gate) and was rejected as not close enough.
+            //
+            // The placeholder asserts no ISBN. The whole list travels in
+            // WorkIsbns, in ISBN-13 space, for DistanceCalculator to test
+            // membership against -- see the note on Edition.WorkIsbns. The
+            // array mixes ISBN-10s, ISBN-13s and hyphenated forms
+            // ("978-2-266-00856-0"); ToIsbn13 brings them to one form and
+            // drops whatever is neither.
+            var workIsbns = (doc.Isbn ?? new List<string>())
+                .Select(IsbnUtils.ToIsbn13)
+                .Where(i => i != null)
+                .Distinct()
+                .ToList();
+
+            // Only for the cover fallback below, where any edition's ISBN will
+            // do: the covers API serves the image of whichever edition it is.
             var isbn13 = doc.Isbn?.FirstOrDefault(i => i?.Length == 13);
 
             // OL's search response includes author_key + author_name as
@@ -121,7 +146,7 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary.Mappers
                         ForeignEditionId = key,
                         TitleSlug = key,
                         Title = doc.Title,
-                        Isbn13 = isbn13,
+                        WorkIsbns = workIsbns,
                         Monitored = true,
 
                         // Cover-resolution chain (best → fallback):

@@ -164,6 +164,7 @@ namespace NzbDrone.Core.Datastore
                           b => b.Id > 0);
 
             Mapper.Entity<Edition>("Editions").RegisterModel()
+                .Ignore(x => x.WorkIsbns)
                 .HasOne(r => r.Book, r => r.BookId)
                 .LazyLoad(x => x.BookFiles,
                           (db, edition) => db.Query<BookFile>(new SqlBuilder(db.DatabaseType).Where<BookFile>(f => f.EditionId == edition.Id)).ToList(),

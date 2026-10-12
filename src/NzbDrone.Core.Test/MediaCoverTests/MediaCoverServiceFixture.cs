@@ -203,6 +203,54 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             covers.Single().Url.Should().Be("/MediaCover/12/banner" + extension);
         }
 
+        // Entity id 0 is a lookup result that is not in the library yet: its
+        // cover is served through MediaCoverProxy, and the URL handed back is
+        // "{UrlBase}/MediaCoverProxy/{hash}/{file}".
+        //
+        // The guard against wrapping a URL a second time compared against
+        // "/MediaCoverProxy/" alone, so on an install with a URL base it never
+        // matched: converting the same cover twice registered the proxy's own
+        // path as a remote URL, and the cover it then pointed at could not be
+        // fetched. OpenLibraryProxy no longer hands the same instances to two
+        // callers, which was how a cover came to be converted twice -- but a
+        // guard that only works without a URL base is not a guard.
+        [TestCase("")]
+        [TestCase("/librarr")]
+        public void should_not_wrap_a_proxied_cover_url_a_second_time(string urlBase)
+        {
+            const string Remote = "https://covers.openlibrary.org/b/id/11481354-L.jpg?default=false";
+
+            Mocker.GetMock<NzbDrone.Core.Configuration.IConfigFileProvider>()
+                  .SetupGet(c => c.UrlBase)
+                  .Returns(urlBase);
+
+            Mocker.GetMock<IMediaCoverProxy>()
+                  .Setup(c => c.RegisterUrl(It.IsAny<string>()))
+                  .Returns((string url) => urlBase + "/MediaCoverProxy/abc123/" + Path.GetFileName(url));
+
+            var covers = new List<MediaCover.MediaCover>
+            {
+                new MediaCover.MediaCover(MediaCoverTypes.Cover, Remote)
+            };
+
+            Subject.ConvertToLocalUrls(0, MediaCoverEntity.Book, covers);
+
+            var proxied = covers.Single().Url;
+            proxied.Should().StartWith(urlBase + "/MediaCoverProxy/");
+
+            Subject.ConvertToLocalUrls(0, MediaCoverEntity.Book, covers);
+
+            covers.Single().Url.Should().Be(proxied);
+            covers.Single().RemoteUrl.Should().Be(Remote, "the second pass must not overwrite the real remote URL with the proxy path");
+
+            // Registered again, which renews the proxy's 24-hour entry -- but
+            // only ever under the remote URL, never the proxy's own path.
+            Mocker.GetMock<IMediaCoverProxy>()
+                  .Verify(c => c.RegisterUrl(Remote), Times.Exactly(2));
+            Mocker.GetMock<IMediaCoverProxy>()
+                  .Verify(c => c.RegisterUrl(It.Is<string>(u => u != Remote)), Times.Never());
+        }
+
         [Test]
         public void should_resize_covers_if_main_downloaded()
         {
