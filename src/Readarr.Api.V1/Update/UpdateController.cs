@@ -13,10 +13,12 @@ namespace Readarr.Api.V1.Update
     {
         private readonly IRecentUpdateProvider _recentUpdateProvider;
         private readonly IUpdateHistoryService _updateHistoryService;
+        private readonly ICheckUpdateService _checkUpdateService;
 
-        public UpdateController(IRecentUpdateProvider recentUpdateProvider, IUpdateHistoryService updateHistoryService)
+        public UpdateController(IRecentUpdateProvider recentUpdateProvider, IUpdateHistoryService updateHistoryService, ICheckUpdateService checkUpdateService)
         {
             _recentUpdateProvider = recentUpdateProvider;
+            _checkUpdateService = checkUpdateService;
             _updateHistoryService = updateHistoryService;
         }
 
@@ -32,9 +34,15 @@ namespace Readarr.Api.V1.Update
                 var first = resources.First();
                 first.Latest = true;
 
+                // The list is the changelog and names every release. Only one
+                // the update check would actually hand to the installer, with a
+                // package for this platform and a checksum to verify it against,
+                // is installable. Both answers come out of the same cached fetch.
                 if (first.Version > BuildInfo.Version)
                 {
-                    first.Installable = true;
+                    var available = _checkUpdateService.AvailableUpdate();
+
+                    first.Installable = available != null && available.Version == first.Version;
                 }
 
                 var installed = resources.SingleOrDefault(r => r.Version == BuildInfo.Version);
