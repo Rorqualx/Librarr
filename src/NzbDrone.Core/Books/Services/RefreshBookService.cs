@@ -293,11 +293,16 @@ namespace NzbDrone.Core.Books
 
         protected override bool ShouldDelete(Book local)
         {
-            // A book imported from Readarr that reidentify has not mapped yet
-            // is never in the remote list. That is "we could not look it up",
-            // not "the source dropped it", so it must not be deleted for it.
-            if (_legacyBooks.IsUnmappedLegacyBook(local.ForeignBookId))
+            // A book imported from Readarr is never deleted for being absent
+            // from the source's list. Unmapped, it could never be in the list.
+            // Mapped, it is listed only if reidentify matched its author and
+            // work correctly, and a confident match can still be wrong: the
+            // list then belongs to someone else, and deleting on its say-so
+            // would empty the library of books the user chose. Removing one
+            // is the user's call.
+            if (_legacyBooks.IsLegacyBook(local.ForeignBookId))
             {
+                _logger.Debug("Keeping book {0}: it came from Readarr, and such a book is not removed for being missing from the source", local);
                 return false;
             }
 
