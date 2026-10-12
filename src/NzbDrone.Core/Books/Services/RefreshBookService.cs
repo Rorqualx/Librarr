@@ -42,6 +42,7 @@ namespace NzbDrone.Core.Books
         private readonly IEventAggregator _eventAggregator;
         private readonly ICheckIfBookShouldBeRefreshed _checkIfBookShouldBeRefreshed;
         private readonly IMapCoversToLocal _mediaCoverService;
+        private readonly IIdentifyUnmappedLegacyBooks _legacyBooks;
         private readonly Logger _logger;
 
         public RefreshBookService(IBookService bookService,
@@ -59,6 +60,7 @@ namespace NzbDrone.Core.Books
                                   IEventAggregator eventAggregator,
                                   ICheckIfBookShouldBeRefreshed checkIfBookShouldBeRefreshed,
                                   IMapCoversToLocal mediaCoverService,
+                                  IIdentifyUnmappedLegacyBooks legacyBooks,
                                   Logger logger)
         : base(logger, authorMetadataService)
         {
@@ -76,6 +78,7 @@ namespace NzbDrone.Core.Books
             _eventAggregator = eventAggregator;
             _checkIfBookShouldBeRefreshed = checkIfBookShouldBeRefreshed;
             _mediaCoverService = mediaCoverService;
+            _legacyBooks = legacyBooks;
             _logger = logger;
         }
 
@@ -117,6 +120,13 @@ namespace NzbDrone.Core.Books
             var book = remote.SingleOrDefault(x => x.ForeignBookId == local.ForeignBookId);
 
             if (book == null && ShouldDelete(local))
+            {
+                return result;
+            }
+
+            // Asking the source about an id it cannot translate fails the
+            // lookup and, with it, the rest of this author's refresh.
+            if (book == null && _legacyBooks.IsUnmappedLegacyBook(local.ForeignBookId))
             {
                 return result;
             }
@@ -209,6 +219,14 @@ namespace NzbDrone.Core.Books
 
         protected override bool ShouldDelete(Book local)
         {
+            // A book imported from Readarr that reidentify has not mapped yet
+            // is never in the remote list. That is "we could not look it up",
+            // not "the source dropped it", so it must not be deleted for it.
+            if (_legacyBooks.IsUnmappedLegacyBook(local.ForeignBookId))
+            {
+                return false;
+            }
+
             // not manually added and has no files
             return local.AddOptions.AddType != BookAddType.Manual &&
                 !_mediaFileService.GetFilesByBook(local.Id).Any();
