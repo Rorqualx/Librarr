@@ -7,6 +7,13 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.2.4-beta] — 2026-10-12
+
+The fixes from a full audit of the fork: security hardening, the Readarr
+migration path, OpenLibrary handling, PostgreSQL, Windows and the Docker
+image. Read the bold lines under Security and Changed before upgrading;
+several defaults are different.
+
 ### Security
 
 - **Librarr no longer talks to the retired Readarr project's servers.**
@@ -28,6 +35,50 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
   - The web UI no longer reports browser errors to `sentry.servarr.com`
     (the backend half was fixed in 1.2.1-beta).
 
+- **Passwords are stored with a slow, salted hash.** The login password was
+  kept as a single unsalted SHA-256. It is now PBKDF2-HMAC-SHA512 with 210,000
+  iterations and a per-user salt (migration 048). Existing passwords are
+  upgraded the first time each user logs in; nobody has to reset anything. The
+  API no longer returns the stored hash, only a `********` placeholder.
+  Clients using Basic authentication pay for one derivation per request.
+
+- **`X-Forwarded-*` headers are only believed from local and private
+  addresses.** Any client could previously claim to be a local address and
+  skip "authentication disabled for local addresses". A reverse proxy on the
+  same host or LAN keeps working; **a proxy on a public address is no longer
+  trusted, and there is no setting to trust one.**
+
+- **Files served from disk stay inside their folder.** Every static file
+  route (UI, covers, backups, logs, update logs) now refuses a path that
+  resolves outside its root. On Windows a crafted URL could reach other files
+  the service account could read.
+
+- **Backup and update archives cannot write outside their target folder.**
+  Zip and tar entries with `..` or absolute paths are refused.
+
+- **A pinned cover must be an `https` image on `covers.openlibrary.org`.**
+  The cover picker accepted any URL and the server fetched it.
+
+- **API key comparison is constant-time.**
+
+- **Windows installer:** the install folder's permissions are locked down to
+  administrators and the service account, and the installer no longer removes
+  an existing Readarr service unless run with `/REPLACESERVICE=1`.
+
+- **The Goodreads notifications are removed.** "Goodreads Bookshelf" and
+  "Goodreads Owned Books" posted Goodreads book ids, which a library on
+  OpenLibrary does not have, and their sign-in went through
+  `auth.servarr.com`, a server of the retired upstream project. **A saved
+  notification of either type is deleted at startup**, with a `Removing`
+  line in the log.
+
+- **Dependency advisories:** the frontend advisories `yarn audit` reported
+  (6 high, 11 moderate) were cleared, and MailKit/MimeKit, the JWT packages
+  and ImageSharp were updated. Not everything is clear: Dependabot alerts,
+  switched on for this release, list further advisories in npm packages used
+  to build and test the UI, and ImageSharp 3.1.12 has open advisories fixed
+  only in the 4.x line, which needs a licence key at build time.
+
 ### Changed
 
 - **Automatic update installation is off by default on every platform.** It
@@ -37,6 +88,40 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
   changed this setting stop auto-installing after this upgrade**, because the
   old default was never written to `config.xml`. Updates are still offered in
   System → Updates and can be installed from there.
+
+- **The Docker image drops root at start.** A container started as root now
+  runs the app as `PUID`/`PGID` (default 1000:1000) and honours `UMASK_SET`
+  and `TZ`. **A container that relied on running as root must set
+  `PUID=0`/`PGID=0` or fix ownership of `/config`.** Containers started with
+  `--user` behave as before. The compose example now uses the `:beta` tag.
+
+- **Calibre root folders are ebook-only.** Audiobook files are refused there,
+  an audiobook quality profile cannot be set on a Calibre root, and a health
+  check reports roots configured that way. Calibre has no model for a
+  multi-file audiobook, and the old behaviour deleted the wrong formats.
+
+- **Readarr-to-Librarr id mappings below 0.70 confidence are not used until
+  confirmed** on Settings → Metadata. They used to be applied silently.
+
+- **Library Import's API now returns `{ imported, skipped }`** instead of the
+  list of created authors.
+
+- **Manually refreshing one author or book always asks OpenLibrary**, rather
+  than serving the 7-day cache.
+
+- **PostgreSQL is now tested in CI.** Every database test runs against
+  PostgreSQL 14 and 18, and the built app is started on an empty PostgreSQL
+  server so that all migrations are applied by the real host. Before this,
+  nothing the fork added had ever been run on PostgreSQL.
+
+- **Windows is now tested in CI** by a smoke job on `windows-2022`.
+
+- **Release workflow:** the image is started and checked before it is pushed,
+  the SBOM job really runs and can fail the build, third-party actions are
+  pinned by commit, and Dependabot watches NuGet, npm and Actions.
+
+- **Migration guide corrected:** the flag is `-data=`, not `--appdata=`; copy
+  the Readarr data folder before installing; both services can coexist.
 
 ### Fixed
 
@@ -53,12 +138,78 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
   values are corrected as part of the conversion. SQLite is unaffected and the
   migration does nothing there.
 
-### Changed
+- **Readarr migration: books could be merged, deleted or mis-identified.**
+  Book and author ids share a number space on Goodreads and were looked up in
+  one table, so an author mapping could be applied to a book. Two legacy books
+  that map to the same OpenLibrary work are now both kept instead of one being
+  merged away; one book that cannot be fetched no longer fails the whole
+  author; legacy authors with no mapping are skipped with a log line instead
+  of being refreshed against the wrong record.
 
-- **PostgreSQL is now tested in CI.** Every database test runs against
-  PostgreSQL 14 and 18, and the built app is started on an empty PostgreSQL
-  server so that all migrations are applied by the real host. Before this,
-  nothing the fork added had ever been run on PostgreSQL.
+- **Readarr migration: a wrong author match could delete books.** A book
+  that came from Readarr is listed by OpenLibrary only if its author and work
+  were matched correctly. A confident but wrong match left the author's books
+  off the list, and the next refresh removed every one that had no files.
+  Books that still carry a Readarr id are now never removed for being missing
+  from the source; removing one is up to you.
+
+- **A missing ebook file blocked audiobook grabs, and the other way round.**
+  With "unmonitor deleted books" on, RSS sync rejected a release if any file
+  of the book was missing from disk. It now looks only at files of the
+  release's own format.
+
+- **The API key in `config.xml` could differ from the one the server
+  accepted after a first start.** Two parts of the app rewrote the file at
+  the same moment on a first-ever start, so the key could be missing from
+  the file or be a different one, and anything that read it got 401 until
+  Librarr was restarted. Found by the new Windows CI job; not specific to
+  Windows.
+
+- **Low-confidence mapping page.** It listed authors as books, saved ids
+  without validating them, made one request per row and showed nothing when a
+  row failed. It now distinguishes authors from books, validates the id,
+  reports errors per row and reloads after a change. Rows already damaged by
+  the old page are not repaired automatically.
+
+- **OpenLibrary import lists could not add books.** All three list types
+  produced items the importer rejected, and the sync reported items as added
+  that were not.
+
+- **A rejected download raised a false "import failed" health error.**
+
+- **A book with both an EPUB and an audiobook imported only one of them.**
+  Custom-format scoring, the pending queue and release ranking are now
+  format-aware too.
+
+- **Narrator pages returned 404 after an edition was deleted.** Orphaned
+  narrator rows are cleaned up by housekeeping.
+
+- **OpenLibrary outages and slow responses.** Timeouts are now retried and
+  counted towards backing off, `Retry-After` is capped at 10 seconds, an ISBN
+  search that finds nothing returns an empty result instead of an error, and
+  redirected or deleted records are followed or skipped.
+
+- **OpenLibrary data quality.** ISBNs listed on the work are used for
+  matching, the 1900-01-01 placeholder is no longer treated as a release date
+  or as a "new" book, authors with more than 1,000 works are paged, and more
+  date formats parse.
+
+- **Library Import** created duplicate authors, re-added existing ones, and
+  could leave the spinner running or show stale folders.
+
+- **Calibre:** upgrading a book removed every format instead of the one being
+  replaced, and deleting one file removed the whole book.
+
+- **Books with no monitored edition, or more than one, threw** in several
+  places that assumed exactly one.
+
+- **API parameter binding.** Controller parameters are no longer filled from
+  the service container by inference, the root cause of the empty request
+  bodies seen after the move to .NET 10. An author's audiobook quality profile id is
+  validated. A missing SSL certificate file is reported by name.
+
+- **Windows:** a service installed with `/i` never listened on its port, and
+  a fatal startup error hung for an hour instead of exiting.
 
 ## [1.2.3-beta] — 2026-10-11
 
@@ -807,7 +958,8 @@ fork's code-level inventory.
 - Internal `Readarr.*` csproj rename / `NzbDrone.*` namespace
   rebrand (deliberately preserved).
 
-[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.3-beta...HEAD
+[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.4-beta...HEAD
+[1.2.4-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.3-beta...v1.2.4-beta
 [1.2.3-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.2-beta...v1.2.3-beta
 [1.2.2-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.1-beta...v1.2.2-beta
 [1.2.1-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.0-beta...v1.2.1-beta

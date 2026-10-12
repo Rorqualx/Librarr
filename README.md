@@ -4,7 +4,7 @@
 [![Nightly integration](https://github.com/Rorqualx/Librarr/actions/workflows/nightly-integration.yml/badge.svg)](https://github.com/Rorqualx/Librarr/actions/workflows/nightly-integration.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.md)
 
-> **1.2.3-beta — 2026-10-11.** Forked from the archived
+> **1.2.4-beta — 2026-10-12.** Forked from the archived
 > [Readarr/Readarr](https://github.com/Readarr/Readarr) project (last
 > upstream commit `0b79d300`, 2025-06-27). Rebuilds Readarr on top of
 > Open Library as the primary metadata source.
@@ -144,7 +144,7 @@ Docker Hub is the same image: `rorqualx/librarr:beta`. Tags are
 `:<version>` for every release, `:beta` on beta tags, and `:latest` only
 on non-prerelease tags. Every release so far is a beta, so **`:latest`
 does not exist yet** — use `:beta` or an explicit version such as
-`:1.2.3-beta` until there is a stable release.
+`:1.2.4-beta` until there is a stable release.
 
 The container starts as root only long enough to give `/config` to
 `PUID:PGID` (default `1000:1000`), then runs Librarr as that user. It
@@ -175,7 +175,7 @@ that would settle it.
 
 ## Status
 
-**1.2.3-beta.** The OpenLibrary metadata proxy, BookIdMapping bridge,
+**1.2.4-beta.** The OpenLibrary metadata proxy, BookIdMapping bridge,
 reidentify pipeline, first-boot migration, Library Import wizard, and
 multi-arch images are all shipped, joined in the 1.2.x-beta line by per-format
 quality profiles, a root-folder audiobook profile default, and the
