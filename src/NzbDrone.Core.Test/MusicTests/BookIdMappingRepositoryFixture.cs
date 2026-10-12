@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Core.Books;
@@ -60,35 +59,28 @@ namespace NzbDrone.Core.Test.MusicTests
         }
 
         [Test]
-        public void should_find_by_goodreads_id()
+        public void should_find_book_mapping_by_goodreads_id()
         {
-            Subject.FindByGoodreadsId("5907").OpenLibraryWorkId.Should().Be("OL262758W");
-            Subject.FindByGoodreadsId("nope").Should().BeNull();
-        }
-
-        [Test]
-        public void should_find_by_goodreads_ids()
-        {
-            Subject.FindByGoodreadsIds(new List<string> { "5907", "33", "nope" })
-                .Select(x => x.GoodreadsId)
-                .Should().BeEquivalentTo("5907", "33");
+            Subject.FindBookByGoodreadsId("5907").OpenLibraryWorkId.Should().Be("OL262758W");
+            Subject.FindBookByGoodreadsId("nope").Should().BeNull();
         }
 
         [Test]
         public void should_find_by_open_library_work_id()
         {
-            Subject.FindByOpenLibraryWorkId("OL27448W").GoodreadsId.Should().Be("33");
-            Subject.FindByOpenLibraryWorkId("nope").Should().BeNull();
+            Subject.FindBooksByOpenLibraryWorkId("OL27448W").Should().ContainSingle()
+                .Which.GoodreadsId.Should().Be("33");
+            Subject.FindBooksByOpenLibraryWorkId("nope").Should().BeEmpty();
         }
 
         [Test]
         public void should_find_author_mapping_only_where_work_id_is_null()
         {
-            Subject.FindByOpenLibraryAuthorId("OL26320A").GoodreadsId.Should().Be("656983");
+            Subject.FindAuthorByOpenLibraryAuthorId("OL26320A").GoodreadsId.Should().Be("656983");
 
             // A book row with the same value in OpenLibraryEditionId is not
             // an author mapping.
-            Subject.FindByOpenLibraryAuthorId("OL26331930M").Should().BeNull();
+            Subject.FindAuthorByOpenLibraryAuthorId("OL26331930M").Should().BeNull();
         }
 
         [Test]
@@ -101,7 +93,7 @@ namespace NzbDrone.Core.Test.MusicTests
         [Test]
         public void should_store_fractional_confidence()
         {
-            Subject.FindByGoodreadsId("656983").Confidence.Should().BeApproximately(0.9, 0.0001);
+            Subject.FindAuthorByGoodreadsId("656983").Confidence.Should().BeApproximately(0.9, 0.0001);
         }
 
         [Test]
@@ -111,7 +103,7 @@ namespace NzbDrone.Core.Test.MusicTests
             // PostgreSQL. The server converts the UTC instant it is sent to
             // its own zone's wall clock before dropping the zone, so on any
             // server not running in UTC this came back shifted by the offset.
-            var stored = Subject.FindByGoodreadsId("5907");
+            var stored = Subject.FindBookByGoodreadsId("5907");
 
             stored.CreatedUtc.ToUniversalTime().Should().Be(Created);
         }
