@@ -25,7 +25,13 @@ namespace NzbDrone.Core.Books
         // High-confidence cut. Anything below this surfaces in the Phase 5
         // wizard's manual-review step.
         private const double HighConfidence = 0.85;
-        private const double MediumConfidence = 0.70;
+
+        // Below this a mapping is a guess. It is still written, so the
+        // review page can show it, but nothing translates through it until
+        // the user confirms it there (BookIdMapping.IsTrusted). The author
+        // or book it belongs to stays as it was imported in the meantime:
+        // kept, and not refreshed.
+        private const double MediumConfidence = BookIdMapping.MinimumTrustedConfidence;
 
         // Confidence assigned when a file-tag-derived ID resolves on OL.
         // ISBN-13 from the file is the strongest signal we get — stronger
@@ -273,7 +279,11 @@ namespace NzbDrone.Core.Books
 
         private void ApplyFileTagMapping(Book book, BookIdMapping fileTagMapping)
         {
-            var existing = _mappingRepo.FindByGoodreadsId(book.ForeignBookId);
+            // The book's own row. An author can have the same Goodreads id
+            // (they were numbered separately), and taking the author's row
+            // here overwrote it with this book's work: the author then
+            // stopped translating and every refresh of it failed.
+            var existing = _mappingRepo.FindBookByGoodreadsId(book.ForeignBookId);
             var verdict = ResolveOverride(existing, fileTagMapping);
 
             switch (verdict)
@@ -339,7 +349,9 @@ namespace NzbDrone.Core.Books
                 return;
             }
 
-            if (_mappingRepo.FindByGoodreadsId(goodreadsId) != null)
+            // Already mapped as an author. A book with the same number is
+            // somebody else's row and says nothing about this author.
+            if (_mappingRepo.FindAuthorByGoodreadsId(goodreadsId) != null)
             {
                 return;
             }
@@ -358,7 +370,11 @@ namespace NzbDrone.Core.Books
             }
 
             var best = PickBestAuthor(candidates, author);
-            if (best == null)
+
+            // What makes this an author row is the empty work id together
+            // with an author OLID in the edition column. Anything else in
+            // that column would be a row no lookup recognises.
+            if (best == null || !OpenLibraryIdHelper.IsAuthorId(best.ForeignAuthorId))
             {
                 return;
             }
@@ -374,6 +390,11 @@ namespace NzbDrone.Core.Books
                 Source = BookIdMappingSource.TitleAuthor,
                 CreatedUtc = DateTime.UtcNow
             });
+
+            if (confidence < MediumConfidence)
+            {
+                _logger.Info("Low-confidence match for author '{0}': '{1}' ({2}, confidence {3:F2}). It will not be used, and the author will not be refreshed, until it is confirmed on the low-confidence mappings page", name, best.Name, best.ForeignAuthorId, confidence);
+            }
         }
 
         private void MapBook(Book book)
@@ -383,7 +404,10 @@ namespace NzbDrone.Core.Books
                 return;
             }
 
-            if (_mappingRepo.FindByGoodreadsId(book.ForeignBookId) != null)
+            // Already mapped as a book. The author with the same number has
+            // a row of its own, and finding that one here left the book
+            // unmapped for good.
+            if (_mappingRepo.FindBookByGoodreadsId(book.ForeignBookId) != null)
             {
                 return;
             }
@@ -439,7 +463,7 @@ namespace NzbDrone.Core.Books
 
             if (confidence < MediumConfidence)
             {
-                _logger.Info("Low-confidence mapping for book '{0}' (confidence {1:F2}) — needs manual review", book.Title, confidence);
+                _logger.Info("Low-confidence mapping for book '{0}' (confidence {1:F2}) — needs manual review. It will not be used, and the book will not be refreshed, until it is confirmed on the low-confidence mappings page", book.Title, confidence);
             }
 
             return true;
@@ -455,8 +479,10 @@ namespace NzbDrone.Core.Books
 
         private static double ScoreAuthorMatch(Author candidate, Author target)
         {
-            // Exact-name → 0.9, anything else → 0.5 (manual review threshold).
-            // The Phase 5 wizard's MediumConfidence cutoff is 0.7.
+            // Exact-name → 0.9, anything else → 0.5. The second is "the
+            // first thing the search returned", which is below
+            // MediumConfidence on purpose: it is recorded for review and
+            // not used.
             if (string.Equals(candidate.Name, target.Name, StringComparison.OrdinalIgnoreCase))
             {
                 return 0.90;
