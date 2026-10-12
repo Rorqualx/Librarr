@@ -131,6 +131,41 @@ namespace NzbDrone.Core.Test.DecisionEngineTests.RssSync
         }
 
         [Test]
+        public void should_return_true_if_only_a_file_of_the_other_format_is_missing()
+        {
+            var ebook = new BookFile
+            {
+                Id = 3,
+                Path = "/My.Author.Book.epub",
+                Quality = new QualityModel(Quality.EPUB, new Revision(version: 1)),
+                DateAdded = DateTime.Now,
+                EditionId = 1
+            };
+
+            SetupMediaFile(new List<BookFile> { ebook });
+
+            Subject.IsSatisfiedBy(_parseResultSingle, null).Accepted.Should().BeTrue();
+        }
+
+        [Test]
+        public void should_return_false_if_an_ebook_is_missing_and_the_release_is_an_ebook()
+        {
+            var ebook = new BookFile
+            {
+                Id = 3,
+                Path = "/My.Author.Book.epub",
+                Quality = new QualityModel(Quality.EPUB, new Revision(version: 1)),
+                DateAdded = DateTime.Now,
+                EditionId = 1
+            };
+
+            SetupMediaFile(new List<BookFile> { ebook });
+            _parseResultSingle.ParsedBookInfo.Quality = new QualityModel(Quality.MOBI, new Revision(version: 1));
+
+            Subject.IsSatisfiedBy(_parseResultSingle, null).Accepted.Should().BeFalse();
+        }
+
+        [Test]
         public void should_return_true_if_both_of_multiple_episode_exist()
         {
             WithExistingFile(_firstFile);

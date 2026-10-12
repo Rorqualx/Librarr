@@ -168,6 +168,13 @@ namespace NzbDrone.Core.MetadataSource
                    TranslateBookToOpenLibrary(foreignBookId) == null;
         }
 
+        public bool IsLegacyBook(string foreignBookId)
+        {
+            return IsOpenLibrary &&
+                   foreignBookId.IsNotNullOrWhiteSpace() &&
+                   !OpenLibraryIdHelper.IsWorkId(foreignBookId);
+        }
+
         public bool IsUnmappedLegacyAuthor(string foreignAuthorId)
         {
             return IsOpenLibrary &&

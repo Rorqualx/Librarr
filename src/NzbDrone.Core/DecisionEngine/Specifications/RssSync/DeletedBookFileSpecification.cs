@@ -6,6 +6,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Qualities;
 
 namespace NzbDrone.Core.DecisionEngine.Specifications.RssSync
 {
@@ -43,8 +44,12 @@ namespace NzbDrone.Core.DecisionEngine.Specifications.RssSync
                 return Decision.Accept();
             }
 
+            // Only files of the release's own format. An ebook that has gone
+            // missing says nothing about whether the audiobook is wanted, and
+            // the other way round: they are separate slots for one book.
             var missingTrackFiles = subject.Books
                                              .SelectMany(v => _bookService.GetFilesByBook(v.Id))
+                                             .MatchingFormat(subject.ParsedBookInfo?.Quality)
                                              .DistinctBy(v => v.Id)
                                              .Where(v => IsTrackFileMissing(subject.Author, v))
                                              .ToArray();
