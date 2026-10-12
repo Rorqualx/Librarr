@@ -68,6 +68,14 @@ namespace NzbDrone.Common.Test
         }
 
         [Test]
+        public void UpdateAutomatically_should_be_off_unless_enabled()
+        {
+            // Upstream defaulted this to on for Windows. Release packages are
+            // not signed, so installing them unattended has to be opted into.
+            Subject.UpdateAutomatically.Should().BeFalse();
+        }
+
+        [Test]
         public void GetValue_Success()
         {
             const string key = "Port";
