@@ -252,6 +252,69 @@ namespace NzbDrone.Core.Test.MediaFiles.BookImport.Identification
             missing.Should().BeLessThan(Score("0441172660"));
         }
 
+        // A search-result candidate stands for a work and carries the ISBNs of
+        // all its editions in WorkIsbns rather than one of them in Isbn13.
+        // The list can confirm a match but never contradict one; the
+        // end-to-end numbers are in SearchCandidateIsbnFixture.
+        [Test]
+        public void work_isbn_list_should_confirm_but_never_contradict()
+        {
+            Distance Score(string fileIsbn, string editionIsbn, List<string> workIsbns)
+            {
+                var edition = new Edition
+                {
+                    Title = "Dune",
+                    Isbn13 = editionIsbn,
+                    WorkIsbns = workIsbns,
+                    Book = new Book
+                    {
+                        Title = "Dune",
+                        AuthorMetadata = new AuthorMetadata { Name = "Frank Herbert" }
+                    }
+                };
+
+                var localBooks = new List<LocalBook>
+                {
+                    new LocalBook
+                    {
+                        Path = "/books/dune.epub",
+                        FileTrackInfo = new ParsedTrackInfo
+                        {
+                            Authors = new List<string> { "Frank Herbert" },
+                            BookTitle = "Dune",
+                            Isbn = fileIsbn
+                        }
+                    }
+                };
+
+                return DistanceCalculator.BookDistance(localBooks, edition);
+            }
+
+            var work = new List<string> { "9780143111580", "9780441172719" };
+
+            // In the list, in either format: the isbn bucket, at distance 0.
+            var listed = Score("9780441172719", null, work);
+            listed.Penalties.Should().ContainKey("isbn").WhichValue.Should().Equal(0.0);
+            listed.Penalties.Should().NotContainKey("isbn_missing");
+            Score("0441172717", null, work).Penalties.Should().ContainKey("isbn");
+
+            // Not in the list: missing, never the isbn bucket at distance 1.
+            var unlisted = Score("9780306406157", null, work);
+            unlisted.Penalties.Should().ContainKey("isbn_missing");
+            unlisted.Penalties.Should().NotContainKey("isbn");
+
+            // File has none, the work has some: missing, as for an edition.
+            Score(null, null, work).Penalties.Should().ContainKey("isbn_missing");
+
+            // Neither side has one: nothing to say.
+            Score(null, null, new List<string>()).Penalties.Should().NotContainKey("isbn_missing");
+            Score(null, null, null).Penalties.Should().NotContainKey("isbn_missing");
+
+            // A real edition's own ISBN is still an assertion and still
+            // decides, whatever list happens to be attached.
+            Score("9780441172719", "9780143111580", work).Penalties["isbn"].Should().Equal(1.0);
+        }
+
         // A candidate mapped straight from a metadata source has not been
         // through a DB lazy load, so Book.AuthorMetadata can be null. Scoring
         // one must not take the whole import run down.

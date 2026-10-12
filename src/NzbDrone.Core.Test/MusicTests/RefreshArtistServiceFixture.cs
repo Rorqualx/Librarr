@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FizzWare.NBuilder;
 using Moq;
 using NUnit.Framework;
@@ -87,7 +88,7 @@ namespace NzbDrone.Core.Test.MusicTests
                 .Returns(new List<RootFolder>());
 
             Mocker.GetMock<IMonitorNewBookService>()
-                .Setup(x => x.ShouldMonitorNewBook(It.IsAny<Book>(), It.IsAny<List<Book>>(), It.IsAny<NewItemMonitorTypes>()))
+                .Setup(x => x.ShouldMonitorNewBook(It.IsAny<Book>(), It.IsAny<List<Book>>(), It.IsAny<NewItemMonitorTypes>(), It.IsAny<bool>()))
                 .Returns(true);
         }
 
@@ -176,8 +177,12 @@ namespace NzbDrone.Core.Test.MusicTests
 
             Subject.Execute(new RefreshAuthorCommand(_author.Id));
 
+            // The existing books are handed over as one list (up to date and
+            // updated together), and the builder's author has a LastInfoSync,
+            // so it counts as previously synced. What that flag and the dates
+            // then do is RefreshAuthorNewBookMonitoringFixture's subject.
             Mocker.GetMock<IMonitorNewBookService>()
-                .Verify(x => x.ShouldMonitorNewBook(newBook, _books, _author.MonitorNewItems), Times.Once());
+                .Verify(x => x.ShouldMonitorNewBook(newBook, It.Is<List<Book>>(l => l.SequenceEqual(_books)), _author.MonitorNewItems, true), Times.Once());
         }
 
         [Test]

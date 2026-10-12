@@ -99,8 +99,14 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary.Mappers
                     // fetches /works/{key}.json (which usually has a
                     // `first_publish_date` even when the author/works
                     // index doesn't).
+                    //
+                    // The placeholder is a named value, not a date: it means
+                    // "not known yet", and anything that reasons about when a
+                    // book came out has to ask PlaceholderReleaseDate.IsKnown
+                    // rather than read it as 1900. See that type for why it
+                    // is not simply null.
                     var releaseDate = OpenLibraryDateParser.Parse(w.FirstPublishDate)
-                        ?? new System.DateTime(1900, 1, 1, 0, 0, 0, System.DateTimeKind.Utc);
+                        ?? PlaceholderReleaseDate.Value;
 
                     return new Book
                     {

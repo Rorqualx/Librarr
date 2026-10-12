@@ -101,20 +101,40 @@ namespace NzbDrone.Core.MediaCover
                 // Author isn't in Readarr yet, map via a proxy to circument referrer issues
                 foreach (var mediaCover in covers)
                 {
-                    // Idempotency guard. OL search results are cached in-process
-                    // (LazyCache, 1h TTL) and the same MediaCover instances
-                    // are returned on repeat searches. Re-running this mutation
-                    // would wrap the proxy URL itself — the new hash points at
-                    // a path-only `/MediaCoverProxy/<oldhash>/...`, and .NET
-                    // HttpClient throws "file scheme not supported" when it
-                    // tries to fetch that path-only URL on cache hit. Skip if
-                    // we already wrapped this MediaCover.
-                    if (mediaCover.Url != null && mediaCover.Url.StartsWith("/MediaCoverProxy/", StringComparison.Ordinal))
+                    // Idempotency guard: a cover that has already been through
+                    // here must not have its proxy URL taken for a remote one.
+                    // Wrapping it again registers a path-only
+                    // `/MediaCoverProxy/<oldhash>/...` as though it were
+                    // fetchable, and .NET HttpClient throws "file scheme not
+                    // supported" when the proxy tries.
+                    //
+                    // This used to be the only thing standing between a cached
+                    // OL search result and that failure, and it did not hold:
+                    // it tested for "/MediaCoverProxy/" at the start of the
+                    // URL, while RegisterUrl returns UrlBase + that, so with a
+                    // URL base configured it never matched. OpenLibraryProxy
+                    // now maps search results per call, so the same MediaCover
+                    // is no longer handed to two requests -- but the guard
+                    // stays, and now compares against what RegisterUrl
+                    // actually produces.
+                    //
+                    // An already-proxied cover is re-registered from its
+                    // RemoteUrl rather than skipped. The hash is derived from
+                    // the URL, so the result is the same string; what it buys
+                    // is a fresh 24 hours on the registration, for any caller
+                    // that has held on to a cover for longer than that.
+                    if (IsProxyUrl(mediaCover.Url))
                     {
-                        continue;
+                        if (mediaCover.RemoteUrl.IsNullOrWhiteSpace())
+                        {
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        mediaCover.RemoteUrl = mediaCover.Url;
                     }
 
-                    mediaCover.RemoteUrl = mediaCover.Url;
                     mediaCover.Url = _mediaCoverProxy.RegisterUrl(mediaCover.RemoteUrl);
                 }
             }
@@ -147,6 +167,12 @@ namespace NzbDrone.Core.MediaCover
                     }
                 }
             }
+        }
+
+        // The shape MediaCoverProxy.RegisterUrl returns, URL base included.
+        private bool IsProxyUrl(string url)
+        {
+            return url != null && url.StartsWith(_configFileProvider.UrlBase + "/MediaCoverProxy/", StringComparison.Ordinal);
         }
 
         private string GetAuthorCoverPath(int authorId)

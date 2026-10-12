@@ -42,6 +42,26 @@ namespace NzbDrone.Core.Books
         public bool Monitored { get; set; }
         public bool ManualAdd { get; set; }
 
+        // Search-result only, never persisted (TableMapping ignores it), and
+        // null on every edition that is a real edition.
+        //
+        // A title/author search returns works, not editions, and the single
+        // Edition a search result carries is a placeholder standing for the
+        // whole work. OpenLibrary lists the ISBNs of *every* edition of that
+        // work against it. Putting one of them in Isbn13 would claim the
+        // placeholder is that edition, and a file tagged with any of the
+        // others would then score as a full ISBN mismatch against the right
+        // book. They live here instead, normalised to ISBN-13, and
+        // DistanceCalculator asks the question that can actually be answered:
+        // is the file's ISBN one of this work's?
+        //
+        // [MemberwiseEqualityIgnore] for the reason given on
+        // AuthorMetadata.WorkCount: it cannot round-trip through the
+        // database, so it must not make a fetched edition compare unequal to
+        // its own stored row.
+        [MemberwiseEqualityIgnore]
+        public List<string> WorkIsbns { get; set; }
+
         // These are dynamically queried from other tables
         [MemberwiseEqualityIgnore]
         public LazyLoaded<Book> Book { get; set; }

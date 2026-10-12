@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -46,6 +47,19 @@ namespace NzbDrone.Core.Books
         private readonly IConfigService _configService;
         private readonly IImportListExclusionService _importListExclusionService;
         private readonly Logger _logger;
+
+        // Each author's LastInfoSync as it stood when the refresh in progress
+        // began, keyed by author id. UpdateEntity stamps LastInfoSync with
+        // "now" before the books are looked at (the stamp is only *saved* at
+        // the end, so a failed refresh does not count), which means that by
+        // the time the new books are judged the author object can no longer
+        // say whether it had ever been synced before. That is the question
+        // MonitorNewBookService needs answered -- see AuthorPreviouslySynced.
+        //
+        // One small entry per author, overwritten on every refresh. A
+        // dictionary rather than a field because this service is a singleton
+        // and two refresh commands can be executing at once.
+        private readonly ConcurrentDictionary<int, DateTime?> _lastSyncBeforeRefresh = new ConcurrentDictionary<int, DateTime?>();
 
         public RefreshAuthorService(IProvideAuthorInfo authorInfo,
                                     IAuthorService authorService,
@@ -136,6 +150,9 @@ namespace NzbDrone.Core.Books
                 result = UpdateResult.UpdateTags;
             }
 
+            // Before it is overwritten two lines down.
+            _lastSyncBeforeRefresh[local.Id] = local.LastInfoSync;
+
             local.UseMetadataFrom(remote);
             local.Metadata = remote.Metadata;
             local.Series = remote.Series.Value;
@@ -181,6 +198,10 @@ namespace NzbDrone.Core.Books
         protected override UpdateResult MergeEntity(Author local, Author target, Author remote)
         {
             _logger.Warn($"Author {local} was replaced with {remote} because the original was a duplicate.");
+
+            // The refresh carries on against the target, which does not go
+            // through UpdateEntity, so its own sync history is what counts.
+            _lastSyncBeforeRefresh[target.Id] = target.LastInfoSync;
 
             // Update list exclusion if one exists
             var importExclusionLocal = _importListExclusionService.FindByForeignId(local.Metadata.Value.ForeignAuthorId);
@@ -277,10 +298,55 @@ namespace NzbDrone.Core.Books
             // discography) but the Books library page's monitored-only
             // filter default hides them from the library grid until
             // the user explicitly flips the monitor toggle on a row.
+            //
+            // This is the first of two looks at each new book. Here it is
+            // still the slim record from the author's works list, which from
+            // OpenLibrary means no real release date, so for an author set to
+            // monitor new books only the answer rests on discovery alone. The
+            // second look, with the date the per-book fetch found, is in
+            // RefreshChildren.
+            var existing = ExistingBooks(children);
+            var previouslySynced = AuthorPreviouslySynced(entity);
+
             foreach (var book in children.Added)
             {
-                book.Monitored = _monitorNewBookService.ShouldMonitorNewBook(book, children.UpToDate, entity.MonitorNewItems);
+                book.Monitored = _monitorNewBookService.ShouldMonitorNewBook(book, existing, entity.MonitorNewItems, previouslySynced);
             }
+        }
+
+        // The books the author already had, to compare a new one against.
+        //
+        // Both lists, not UpToDate alone. A stored book only counts as up to
+        // date when it is identical to the slim record in the works list, and
+        // a book that has had its per-book fetch never is -- it has real
+        // ratings and a real date where the slim record has placeholders. So
+        // UpToDate was, in practice, the books that had *not* been fetched
+        // yet, and the ones with dates worth comparing against were all in
+        // Updated.
+        private static List<Book> ExistingBooks(SortedChildren children)
+        {
+            return children.UpToDate.Concat(children.Updated).ToList();
+        }
+
+        // Whether this author had completed a refresh before the current one.
+        //
+        // It separates the two situations in which books turn up as new rows.
+        // On an author's first refresh every book is new to us, and none of
+        // them is news. On a later one, a book that was not in the list last
+        // time has appeared at the source since.
+        //
+        // Read from what UpdateEntity (or MergeEntity) recorded rather than
+        // from the author, whose LastInfoSync already holds this refresh's
+        // timestamp by now. LastInfoSync is only saved when a refresh
+        // completes, so an author whose first refresh failed part-way is still
+        // "not previously synced" on the retry.
+        private bool AuthorPreviouslySynced(Author author)
+        {
+            var lastSync = _lastSyncBeforeRefresh.TryGetValue(author.Id, out var before)
+                ? before
+                : author.LastInfoSync;
+
+            return lastSync.HasValue && lastSync.Value > DateTime.MinValue;
         }
 
         protected override void AddChildren(List<Book> children)
@@ -290,7 +356,66 @@ namespace NzbDrone.Core.Books
 
         protected override bool RefreshChildren(SortedChildren localChildren, List<Book> remoteChildren, Author remoteData, bool forceChildRefresh, bool forceUpdateFileTags, DateTime? lastUpdate)
         {
-            return _refreshBookService.RefreshBookInfo(localChildren.All, remoteChildren, remoteData, forceChildRefresh, forceUpdateFileTags, lastUpdate);
+            var updated = _refreshBookService.RefreshBookInfo(localChildren.All, remoteChildren, remoteData, forceChildRefresh, forceUpdateFileTags, lastUpdate);
+
+            ReconsiderNewBooks(localChildren);
+
+            return updated;
+        }
+
+        // The second look at the books this refresh added, for an author set
+        // to monitor new books only.
+        //
+        // ProcessChildren had to decide before the per-book fetch, on a record
+        // with no release date. RefreshBookInfo has now run, and it updates
+        // the very Book instances that were added, so each one carries
+        // whatever date OpenLibrary has for the work. Asking the same question
+        // again lets a real date overrule the guess in either direction: a
+        // work that turned up this week but was published in 1985 stops being
+        // "new", and on a first sync an unreleased book becomes it.
+        //
+        // The decision is a pure function of the book, the existing books and
+        // the author's sync history, so a book whose date did not change gets
+        // the same answer and is left alone. Only the ones that flip are
+        // written, with UpdateMany so that no BookEditedEvent is raised for
+        // what is still part of adding the book.
+        //
+        // This covers the refresh in which the book is discovered and no
+        // other. If the per-book fetch fails there -- RefreshBookInfo throws
+        // and the refresh is abandoned -- the book keeps the first answer, and
+        // when a later refresh does fetch it, it is an existing book by then
+        // and nothing re-asks. Closing that gap needs RefreshBookService to
+        // re-evaluate a book the first time it gets a real date.
+        private void ReconsiderNewBooks(SortedChildren children)
+        {
+            var author = children.Added.FirstOrDefault()?.Author?.Value;
+
+            if (author == null || author.MonitorNewItems != NewItemMonitorTypes.New)
+            {
+                return;
+            }
+
+            var existing = ExistingBooks(children);
+            var previouslySynced = AuthorPreviouslySynced(author);
+            var changed = new List<Book>();
+
+            foreach (var book in children.Added.Where(x => x.Id > 0))
+            {
+                var monitor = _monitorNewBookService.ShouldMonitorNewBook(book, existing, author.MonitorNewItems, previouslySynced);
+
+                if (monitor != book.Monitored)
+                {
+                    _logger.Debug("{0} is {1} now that its release date ({2:yyyy-MM-dd}) is known", book, monitor ? "monitored" : "no longer monitored", book.ReleaseDate);
+
+                    book.Monitored = monitor;
+                    changed.Add(book);
+                }
+            }
+
+            if (changed.Any())
+            {
+                _bookService.UpdateMany(changed);
+            }
         }
 
         protected override void PublishEntityUpdatedEvent(Author entity)
