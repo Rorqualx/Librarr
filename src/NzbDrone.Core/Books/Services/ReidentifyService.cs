@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Net;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Books.Commands;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Commands;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.MetadataSource.OpenLibrary;
 using NzbDrone.Core.Parser.Model;
 
@@ -65,6 +67,11 @@ namespace NzbDrone.Core.Books
         {
             _logger.ProgressInfo("Starting library reidentification onto Open Library");
 
+            // Lookups that failed because the source could not be reached,
+            // as opposed to ones it answered with "no match". Those items
+            // were never really tried, so the run is not finished.
+            var unreachable = 0;
+
             var authors = _authorService.GetAllAuthors();
             _logger.Info("Reidentifying {0} authors", authors.Count);
             foreach (var author in authors)
@@ -76,6 +83,7 @@ namespace NzbDrone.Core.Books
                 catch (Exception ex)
                 {
                     _logger.Warn(ex, "Failed to reidentify author {0}", author);
+                    unreachable += IsSourceUnreachable(ex) ? 1 : 0;
                 }
             }
 
@@ -90,13 +98,30 @@ namespace NzbDrone.Core.Books
                 catch (Exception ex)
                 {
                     _logger.Warn(ex, "Failed to reidentify book {0}", book);
+                    unreachable += IsSourceUnreachable(ex) ? 1 : 0;
                 }
             }
 
             _logger.ProgressInfo("Reidentifying from file tags");
-            FileTagPass(books);
+            unreachable += FileTagPass(books);
+
+            if (unreachable > 0)
+            {
+                // Fail the command so nothing treats this run as complete.
+                // Mappings written so far are kept and skipped next time.
+                throw new ReidentifyIncompleteException(unreachable);
+            }
 
             _logger.ProgressInfo("Library reidentification finished");
+        }
+
+        public static bool IsSourceUnreachable(Exception ex)
+        {
+            // WebException is what the HTTP dispatcher raises for a timeout
+            // or a response cut off mid-body.
+            return ex is MetadataSourceUnavailableException ||
+                   ex is WebException ||
+                   MetadataSourceStatusService.IndicatesUnavailable(ex);
         }
 
         // Phase 5b. File tags are the authoritative source: a reader who
@@ -104,8 +129,10 @@ namespace NzbDrone.Core.Books
         // any server search. So if a tag-derived OL ID exists for a book,
         // it overwrites any server-side mapping — EXCEPT Manual entries,
         // which are user overrides and must never be touched.
-        private void FileTagPass(List<Book> books)
+        private int FileTagPass(List<Book> books)
         {
+            var unreachable = 0;
+
             foreach (var book in books)
             {
                 if (book.ForeignBookId.IsNullOrWhiteSpace())
@@ -120,8 +147,11 @@ namespace NzbDrone.Core.Books
                 catch (Exception ex)
                 {
                     _logger.Warn(ex, "File-tag reidentify failed for book {0}", book);
+                    unreachable += IsSourceUnreachable(ex) ? 1 : 0;
                 }
             }
+
+            return unreachable;
         }
 
         private void ReidentifyBookFromTags(Book book)
