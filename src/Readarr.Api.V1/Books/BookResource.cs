@@ -54,7 +54,9 @@ namespace Readarr.Api.V1.Books
                 return null;
             }
 
-            var selectedEdition = model.Editions?.Value.Where(x => x.Monitored).SingleOrDefault();
+            // Not SingleOrDefault on the monitored ones: it throws when a book
+            // has several, and that turned the whole book list into a 500.
+            var selectedEdition = model.PrimaryEdition();
 
             var title = selectedEdition?.Title ?? model.Title;
             var authorTitle = $"{model.Author?.Value?.Metadata?.Value?.SortNameLastFirst} {title}";
@@ -67,7 +69,7 @@ namespace Readarr.Api.V1.Books
                 Id = model.Id,
                 AuthorId = model.AuthorId,
                 ForeignBookId = model.ForeignBookId,
-                ForeignEditionId = model.Editions?.Value?.SingleOrDefault(x => x.Monitored)?.ForeignEditionId,
+                ForeignEditionId = selectedEdition?.ForeignEditionId,
                 TitleSlug = model.TitleSlug,
                 Monitored = model.Monitored,
                 AnyEditionOk = model.AnyEditionOk,

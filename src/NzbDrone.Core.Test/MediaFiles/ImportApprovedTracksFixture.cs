@@ -117,6 +117,23 @@ namespace NzbDrone.Core.Test.MediaFiles
             Subject.Import(_approvedDecisions, false).Should().HaveCount(1);
         }
 
+        // Reporting the import needs an edition to report it against. A
+        // book that has none must not lose the caller every other result.
+        [Test]
+        public void should_still_return_results_when_the_book_has_no_edition()
+        {
+            Mocker.GetMock<IEditionService>()
+                .Setup(s => s.SetMonitored(It.IsAny<Edition>()))
+                .Returns(new List<Edition>());
+
+            Subject.Import(_approvedDecisions, false).Should().HaveCount(1);
+
+            Mocker.GetMock<IEventAggregator>()
+                .Verify(v => v.PublishEvent(It.IsAny<BookImportedEvent>()), Times.Never());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
         [Test]
         public void should_only_import_approved()
         {

@@ -343,12 +343,30 @@ namespace NzbDrone.Core.Books
 
         protected override UpdateResult MergeEntity(Book local, Book target, Book remote)
         {
-            _logger.Warn($"Book {local} was merged with {remote} because the original was a duplicate.");
-
             // Update book ids for trackfiles
             var files = _mediaFileService.GetFilesByBook(local.Id);
-            files.ForEach(x => x.EditionId = target.Editions.Value.Single(e => e.Monitored).Id);
-            _mediaFileService.Update(files);
+
+            if (files.Any())
+            {
+                var edition = target.PrimaryEdition();
+
+                // Files belong to an edition, so they can only follow the
+                // book into one. Carrying on would delete the old book and
+                // its editions from under them. Leave this book as it is
+                // instead: the refresh goes on to fetch the target's
+                // editions, so the merge can happen on the next one.
+                if (edition == null)
+                {
+                    _logger.Warn("Book {0} was not merged into {1}: {1} has no editions to move its {2} file(s) to. It is kept as it is and the merge is tried again on the next refresh", local, target, files.Count);
+
+                    return UpdateResult.None;
+                }
+
+                files.ForEach(x => x.EditionId = edition.Id);
+                _mediaFileService.Update(files);
+            }
+
+            _logger.Warn($"Book {local} was merged with {remote} because the original was a duplicate.");
 
             // Update book ids for history
             var items = _historyService.GetByBook(local.Id, null);

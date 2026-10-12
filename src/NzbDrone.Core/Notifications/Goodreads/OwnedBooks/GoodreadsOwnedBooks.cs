@@ -1,8 +1,8 @@
 using System;
-using System.Linq;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
+using NzbDrone.Core.Books;
 
 namespace NzbDrone.Core.Notifications.Goodreads
 {
@@ -19,8 +19,15 @@ namespace NzbDrone.Core.Notifications.Goodreads
 
         public override void OnReleaseImport(BookDownloadMessage message)
         {
-            var bookId = message.Book.Editions.Value.Single(x => x.Monitored).ForeignEditionId;
-            AddOwnedBook(bookId);
+            var edition = message.Book.PrimaryEdition();
+
+            if (edition == null)
+            {
+                _logger.Debug("Not adding {0} to Goodreads owned books: it has no editions", message.Book);
+                return;
+            }
+
+            AddOwnedBook(edition.ForeignEditionId);
         }
 
         private void AddOwnedBook(string bookId)

@@ -245,6 +245,51 @@ namespace NzbDrone.Core.Test.ParserTests
             parseResult.BookTitle.Should().Be(expectedBook);
         }
 
+        // Search criteria come from the library, where a book has no
+        // editions until its first per-book fetch. Its own title is then
+        // what there is to match the release against.
+        [Test]
+        public void should_parse_with_search_criteria_when_the_book_has_no_editions()
+        {
+            _author.Name = "James Herbert";
+            _books.Add(new Book { Title = "The Fog", Editions = new List<Edition>() });
+
+            var parseResult = Parser.Parser.ParseBookTitleWithSearchCriteria("James Herbert - The Fog EPUB", _author, _books);
+
+            parseResult.AuthorName.Should().Be("James Herbert");
+            parseResult.BookTitle.Should().Be("The Fog");
+        }
+
+        [Test]
+        public void should_parse_with_search_criteria_when_no_edition_is_monitored()
+        {
+            _author.Name = "James Herbert";
+            _books.Add(new Book { Title = "Fog", Editions = new List<Edition> { new Edition { Title = "The Fog" } } });
+
+            var parseResult = Parser.Parser.ParseBookTitleWithSearchCriteria("James Herbert - The Fog EPUB", _author, _books);
+
+            parseResult.BookTitle.Should().Be("The Fog");
+        }
+
+        [Test]
+        public void should_parse_with_search_criteria_when_several_editions_are_monitored()
+        {
+            _author.Name = "James Herbert";
+            _books.Add(new Book
+            {
+                Title = "The Fog",
+                Editions = new List<Edition>
+                {
+                    new Edition { Id = 1, Title = "The Fog", Monitored = true },
+                    new Edition { Id = 2, Title = "The Fog", Monitored = true }
+                }
+            });
+
+            var parseResult = Parser.Parser.ParseBookTitleWithSearchCriteria("James Herbert - The Fog EPUB", _author, _books);
+
+            parseResult.BookTitle.Should().Be("The Fog");
+        }
+
         [TestCase("Ed Sheeran", "I See Fire", "Ed Sheeran I See Fire[Mimp3.eu].mp3 FLAC")]
         [TestCase("Ed Sheeran", "Divide", "Ed Sheeran   ? Divide FLAC")]
         [TestCase("Ed Sheeran", "+", "Ed Sheeran + FLAC")]
