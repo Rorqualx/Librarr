@@ -41,6 +41,10 @@ namespace NzbDrone.Core.MetadataSource
         // Each counted failure has already survived Send()'s three retries with
         // 2s/4s/8s backoff, so five in a row is roughly seventy seconds of solid
         // refusal with nothing succeeding in between. That is not ambiguous.
+        // (The one faster route here is a refusal carrying a Retry-After longer
+        // than the proxy will wait, which is not retried at all. Five of those
+        // is the server saying "not now" five times in as many requests, and
+        // is no more ambiguous.)
         private static readonly TimeSpan[] EscalatingCooldowns =
         {
             TimeSpan.FromMinutes(5),
@@ -184,6 +188,34 @@ namespace NzbDrone.Core.MetadataSource
                 return http.Response == null ||
                        http.Response.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
                        http.Response.HasHttpServerError;
+            }
+
+            return IsTransportFailure(ex);
+        }
+
+        // The request never produced a response: no connection, a connection
+        // that went quiet, or a body that stopped part-way.
+        //
+        // This is the one definition of that, shared with OpenLibraryProxy's
+        // retry loop. They were two hand-copied lists, and both missed the same
+        // thing: the HTTP dispatcher does not let a timeout out as a
+        // TaskCanceledException, nor a torn body as an IOException -- it wraps
+        // them in WebException (Timeout and ReceiveFailure respectively, see
+        // ManagedHttpDispatcher). So a timeout was not retried, and here it fell
+        // through to "the source answered", which RecordFailure treats as
+        // contact: the failure count was reset and an open cooldown cleared. A
+        // server that hangs is the textbook overloaded server, and it was the
+        // one failure the breaker could not see.
+        //
+        // ProtocolError is the exception to the exception. It is the status a
+        // WebException carries when there *was* a response -- HttpClient uses
+        // it for a redirect chain that never ends -- and a server that answered
+        // every hop of a loop is reachable, just wrong about that record.
+        public static bool IsTransportFailure(Exception ex)
+        {
+            if (ex is System.Net.WebException web)
+            {
+                return web.Status != System.Net.WebExceptionStatus.ProtocolError;
             }
 
             return ex is System.Net.Http.HttpRequestException

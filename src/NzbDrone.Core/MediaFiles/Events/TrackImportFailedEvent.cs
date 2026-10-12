@@ -13,11 +13,18 @@ namespace NzbDrone.Core.MediaFiles.Events
         public DownloadClientItemClientInfo DownloadClientInfo { get;  }
         public string DownloadId { get; }
 
-        public TrackImportFailedEvent(Exception exception, LocalBook bookInfo, bool newDownload, DownloadClientItem downloadClientItem)
+        // True when the file was never attempted: an import specification
+        // turned it down ("not an upgrade", no match, ...). Nothing went
+        // wrong on disk, so consumers that diagnose I/O problems from this
+        // event must not read a rejection as one.
+        public bool Rejected { get; }
+
+        public TrackImportFailedEvent(Exception exception, LocalBook bookInfo, bool newDownload, DownloadClientItem downloadClientItem, bool rejected = false)
         {
             Exception = exception;
             BookInfo = bookInfo;
             NewDownload = newDownload;
+            Rejected = rejected;
 
             if (downloadClientItem != null)
             {

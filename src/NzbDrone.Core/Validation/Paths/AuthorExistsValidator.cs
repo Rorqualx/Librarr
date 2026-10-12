@@ -5,6 +5,10 @@ namespace NzbDrone.Core.Validation.Paths
 {
     public class AuthorExistsValidator : PropertyValidator
     {
+        // Shared with the bulk import, which skips such authors instead of
+        // rejecting the request, so both paths word it the same way.
+        public const string AlreadyAddedMessage = "This author has already been added";
+
         private readonly IAuthorService _authorService;
 
         public AuthorExistsValidator(IAuthorService authorService)
@@ -12,7 +16,7 @@ namespace NzbDrone.Core.Validation.Paths
             _authorService = authorService;
         }
 
-        protected override string GetDefaultMessageTemplate() => "This author has already been added";
+        protected override string GetDefaultMessageTemplate() => AlreadyAddedMessage;
 
         protected override bool IsValid(PropertyValidatorContext context)
         {

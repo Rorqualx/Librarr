@@ -11,6 +11,7 @@ using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
+using NzbDrone.Core.Validation.Paths;
 
 namespace NzbDrone.Core.Books
 {
@@ -18,6 +19,7 @@ namespace NzbDrone.Core.Books
     {
         Author AddAuthor(Author newAuthor, bool doRefresh = true);
         List<Author> AddAuthors(List<Author> newAuthors, bool doRefresh = true);
+        AddAuthorsResult ImportAuthors(List<Author> newAuthors, bool doRefresh = true);
     }
 
     public class AddAuthorService : IAddAuthorService
@@ -63,22 +65,68 @@ namespace NzbDrone.Core.Books
 
         public List<Author> AddAuthors(List<Author> newAuthors, bool doRefresh = true)
         {
+            return ImportAuthors(newAuthors, doRefresh).Added;
+        }
+
+        public AddAuthorsResult ImportAuthors(List<Author> newAuthors, bool doRefresh = true)
+        {
             var added = DateTime.UtcNow;
+            var result = new AddAuthorsResult();
             var authorsToAdd = new List<Author>();
+            var queuedIds = new HashSet<string>();
 
             foreach (var s in newAuthors)
             {
+                var foreignAuthorId = s.Metadata.Value.ForeignAuthorId;
+
+                if (foreignAuthorId.IsNullOrWhiteSpace())
+                {
+                    _logger.Warn("Skipping author {0}, it has no foreign author id", s.Metadata.Value.Name);
+                    result.Skipped.Add(new SkippedAuthor { Author = s, Reason = AddAuthorSkipReason.Failed, Message = "An author ID is required" });
+                    continue;
+                }
+
+                // Checked before the lookup so a row that is going to be skipped
+                // anyway doesn't cost a metadata request. Without these checks the
+                // metadata upsert / author insert below hits a unique constraint
+                // and takes the whole batch down with it.
+                if (ShouldSkip(s, foreignAuthorId, queuedIds, result))
+                {
+                    continue;
+                }
+
                 try
                 {
                     var author = AddSkyhookData(s);
+
+                    // The metadata source can answer with a different id than the
+                    // one asked for, so the same checks apply to what came back.
+                    var resolvedId = author.Metadata.Value.ForeignAuthorId;
+                    if (resolvedId.IsNotNullOrWhiteSpace() && resolvedId != foreignAuthorId && ShouldSkip(s, resolvedId, queuedIds, result))
+                    {
+                        continue;
+                    }
+
                     author = SetPropertiesAndValidate(author);
                     author.Added = added;
                     authorsToAdd.Add(author);
+
+                    queuedIds.Add(foreignAuthorId);
+                    if (resolvedId.IsNotNullOrWhiteSpace())
+                    {
+                        queuedIds.Add(resolvedId);
+                    }
                 }
                 catch (Exception ex)
                 {
                     // Catch Import Errors for now until we get things fixed up
-                    _logger.Error(ex, "Failed to import id: {0} - {1}", s.Metadata.Value.ForeignAuthorId, s.Metadata.Value.Name);
+                    _logger.Error(ex, "Failed to import id: {0} - {1}", foreignAuthorId, s.Metadata.Value.Name);
+
+                    var message = ex is ValidationException validationException && validationException.Errors.Any()
+                        ? string.Join("; ", validationException.Errors.Select(x => x.ErrorMessage))
+                        : ex.Message;
+
+                    result.Skipped.Add(new SkippedAuthor { Author = s, Reason = AddAuthorSkipReason.Failed, Message = message });
                 }
             }
 
@@ -86,7 +134,40 @@ namespace NzbDrone.Core.Books
             _authorMetadataService.UpsertMany(authorsToAdd.Select(x => x.Metadata.Value).ToList());
             authorsToAdd.ForEach(x => x.AuthorMetadataId = x.Metadata.Value.Id);
 
-            return _authorService.AddAuthors(authorsToAdd, doRefresh);
+            result.Added = _authorService.AddAuthors(authorsToAdd, doRefresh);
+
+            return result;
+        }
+
+        private bool ShouldSkip(Author requested, string foreignAuthorId, HashSet<string> queuedIds, AddAuthorsResult result)
+        {
+            if (queuedIds.Contains(foreignAuthorId))
+            {
+                _logger.Debug("Skipping author {0}, it is already part of this import", foreignAuthorId);
+                result.Skipped.Add(new SkippedAuthor
+                {
+                    Author = requested,
+                    Reason = AddAuthorSkipReason.Duplicate,
+                    Message = "This author is selected more than once in this import"
+                });
+
+                return true;
+            }
+
+            if (_authorService.FindById(foreignAuthorId) != null)
+            {
+                _logger.Debug("Skipping author {0}, it has already been added", foreignAuthorId);
+                result.Skipped.Add(new SkippedAuthor
+                {
+                    Author = requested,
+                    Reason = AddAuthorSkipReason.Exists,
+                    Message = AuthorExistsValidator.AlreadyAddedMessage
+                });
+
+                return true;
+            }
+
+            return false;
         }
 
         private Author AddSkyhookData(Author newAuthor)

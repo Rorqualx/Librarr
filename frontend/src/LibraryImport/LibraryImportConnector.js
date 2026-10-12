@@ -20,18 +20,25 @@ function createMapStateToProps() {
     (state, { match }) => parseInt(match.params.rootFolderId),
     (libraryImport, rootFolders, rootFolderId) => {
       const rootFolder = rootFolders.items.find((folder) => folder.id === rootFolderId);
+      const rootFoldersFetching = rootFolders.isFetching;
 
       return {
         rootFolderId,
         rootFolder,
-        rootFoldersPopulated: rootFolders.isPopulated,
+        rootFoldersFetching,
         rootFolderPath: rootFolder ? rootFolder.path : '',
         isPopulated: libraryImport.isPopulated,
-        error: libraryImport.error,
+
+        // The rows come out of the root folder fetch, so its failure is this
+        // page's failure. Both are held back while a fetch is in flight: the
+        // list being answered from may be a stale one that predates this root
+        // folder, and saying "not found" about it would be premature.
+        error: rootFoldersFetching ? null : rootFolders.error,
+        rootFolderNotFound: !rootFoldersFetching && rootFolders.isPopulated && !rootFolder,
         items: libraryImport.items,
         isImporting: libraryImport.isImporting,
         importError: libraryImport.importError,
-        failedCount: libraryImport.failedCount,
+        skippedCount: libraryImport.skippedCount,
         defaults: libraryImport.defaults
       };
     }
@@ -53,16 +60,19 @@ class LibraryImportConnector extends Component {
   //
   // Lifecycle
 
-  componentDidUpdate(prevProps) {
+  componentDidUpdate() {
     const {
       rootFolder,
+      rootFoldersFetching,
       isPopulated
     } = this.props;
 
     // The unmapped folder list arrives as part of the root folder resource, so
-    // the rows can only be seeded once that fetch lands. Deep-linking straight
-    // to /add/import/:id means this usually happens after mount, not before.
-    if (rootFolder && (!prevProps.rootFolder || !isPopulated)) {
+    // the rows can only be seeded once the fetch started in onMount lands.
+    // Seeding happens once per visit: isPopulated stays set until unmount, so
+    // a later change to the root folder (the import itself trims its unmapped
+    // list) doesn't rebuild the table and throw away every lookup.
+    if (rootFolder && !rootFoldersFetching && !isPopulated) {
       this.seedFolders();
     }
   }
@@ -82,14 +92,13 @@ class LibraryImportConnector extends Component {
   //
   // Listeners
 
+  // Always refetch rather than seed from whatever is in the store. Which
+  // folders are unmapped is decided by the server from what is on disk and
+  // which authors exist, and a list cached from an earlier visit goes stale
+  // the moment anything is imported — coming back to the page would offer the
+  // folders that were just imported all over again.
   onMount = () => {
-    const { rootFolder, rootFoldersPopulated } = this.props;
-
-    if (rootFolder) {
-      this.seedFolders();
-    } else if (!rootFoldersPopulated) {
-      this.props.dispatchFetchRootFolders();
-    }
+    this.props.dispatchFetchRootFolders();
   };
 
   onUnmount = () => {
@@ -126,7 +135,7 @@ class LibraryImportConnector extends Component {
       dispatchClearLibraryImport,
       rootFolder,
       rootFolderId,
-      rootFoldersPopulated,
+      rootFoldersFetching,
       ...otherProps
     } = this.props;
 
@@ -147,7 +156,7 @@ class LibraryImportConnector extends Component {
 LibraryImportConnector.propTypes = {
   rootFolderId: PropTypes.number.isRequired,
   rootFolder: PropTypes.object,
-  rootFoldersPopulated: PropTypes.bool.isRequired,
+  rootFoldersFetching: PropTypes.bool.isRequired,
   isPopulated: PropTypes.bool.isRequired,
   dispatchFetchRootFolders: PropTypes.func.isRequired,
   dispatchSetLibraryImportFolders: PropTypes.func.isRequired,

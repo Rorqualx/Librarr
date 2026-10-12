@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using NLog;
 using NzbDrone.Common.Disk;
@@ -110,19 +112,56 @@ namespace NzbDrone.Core.MediaFiles
 
             try
             {
-                if (!isCalibre)
+                // A file Calibre does not manage is an ordinary file, even
+                // inside a Calibre root: audio never goes to Calibre (see
+                // CalibreFormats.IsAudio), and without an id there is no
+                // record to ask about.
+                if (!isCalibre || bookFile.CalibreId == 0 || CalibreFormats.IsAudio(bookFile))
                 {
                     _recycleBinProvider.DeleteFile(bookFile.Path, subfolder);
                 }
                 else
                 {
-                    _calibre.DeleteBook(bookFile, rootFolder.CalibreSettings);
+                    DeleteFromCalibre(bookFile, rootFolder.CalibreSettings);
                 }
             }
             catch (Exception e)
             {
                 _logger.Error(e, "Unable to delete book file");
                 throw new NzbDroneClientException(HttpStatusCode.InternalServerError, "Unable to delete book file");
+            }
+        }
+
+        // Removes this file's formats from its Calibre record, and the record
+        // itself only once nothing is left on it.
+        //
+        // This used to delete the record outright. A record holds every format
+        // of the book, so deleting one file took the rest with it — including
+        // formats the user had added in Calibre and Librarr never tracked.
+        private void DeleteFromCalibre(BookFile bookFile, CalibreSettings settings)
+        {
+            var edition = bookFile.Edition?.Value;
+            var related = edition != null
+                ? _mediaFileService.GetFilesByBook(edition.BookId)
+                : _mediaFileService.GetFilesByEdition(bookFile.EditionId);
+
+            var siblings = (related ?? new List<BookFile>())
+                .Where(x => x.Id != bookFile.Id && x.CalibreId == bookFile.CalibreId)
+                .ToList();
+
+            var existing = _calibre.GetBook(bookFile.CalibreId, settings);
+            var formats = CalibreFormats.OwnedBy(bookFile, existing, settings, siblings);
+            var remaining = existing.Formats.Keys.Except(formats).ToList();
+
+            if (remaining.Empty() && siblings.Empty())
+            {
+                _logger.Debug("No formats left on calibre book {0}, deleting it", bookFile.CalibreId);
+                _calibre.DeleteBook(bookFile, settings);
+            }
+            else if (formats.Any())
+            {
+                _logger.Debug("Removing formats {0} from calibre book {1}, keeping {2}", formats.ConcatToString(), bookFile.CalibreId, remaining.ConcatToString());
+                _calibre.RemoveFormats(bookFile.CalibreId, formats, settings);
             }
         }
 

@@ -50,7 +50,7 @@ export const defaultState = {
   error: null,
   isImporting: false,
   importError: null,
-  failedCount: 0,
+  skippedCount: 0,
   rootFolderId: 0,
   items: [],
 
@@ -96,9 +96,14 @@ export const clearLibraryImport = createAction(CLEAR_LIBRARY_IMPORT);
 //
 // Helpers
 
+// Every row update below is updateOnly. The base reducer appends when the id
+// is missing, and a lookup routinely outlives its row — the row is imported
+// while its search is still in flight — so without the flag the late result
+// re-adds the row as a ghost with no folder behind it.
 function lookupAuthor(dispatch, item) {
   dispatch(updateItem({
     section,
+    updateOnly: true,
     id: item.id,
     isFetching: true,
     error: null
@@ -116,6 +121,7 @@ function lookupAuthor(dispatch, item) {
   request.done((data) => {
     dispatch(updateItem({
       section,
+      updateOnly: true,
       id: item.id,
       isFetching: false,
       isPopulated: true,
@@ -136,6 +142,7 @@ function lookupAuthor(dispatch, item) {
 
     dispatch(updateItem({
       section,
+      updateOnly: true,
       id: item.id,
       isFetching: false,
       isPopulated: false,
@@ -196,20 +203,27 @@ export const actionHandlers = handleThunks({
       queue.push({ id, term });
     }
 
+    // Searching again drops the current match, and with it the row's tick
+    // (LibraryImport only keeps a tick on a row that has a selectedAuthor).
+    // Otherwise the new first hit would slide in under a tick the user gave
+    // to a different author, and Import would add one they never looked at.
     dispatch(updateItem({
       section,
+      updateOnly: true,
       id,
       term,
-      isFetching: true
+      isFetching: true,
+      selectedAuthor: undefined,
+      importOutcome: null
     }));
 
     processQueue(dispatch);
   },
 
   [IMPORT_AUTHORS]: function(getState, payload, dispatch) {
-    // Reset failedCount here, not just on success — otherwise a warning from
+    // Reset skippedCount here, not just on success — otherwise a warning from
     // a previous attempt outlives the retry that fixed it.
-    dispatch(set({ section, isImporting: true, importError: null, failedCount: 0 }));
+    dispatch(set({ section, isImporting: true, importError: null, skippedCount: 0 }));
 
     const state = getState()[section];
     const ids = payload.ids;
@@ -245,13 +259,26 @@ export const actionHandlers = handleThunks({
     }).request;
 
     promise.done((data) => {
-      // AddAuthors skips authors it can't resolve and returns only the ones it
-      // added, so the response is the authoritative list of what worked. Rows
-      // that made it drop off the table; anything left behind is a genuine
-      // failure the user still needs to deal with, and saying so beats
-      // navigating away as though everything succeeded.
-      dispatch(batchActions([
-        ...data.map((author) => updateItem({ section: 'authors', ...author })),
+      // The response is the authoritative account of what happened: `imported`
+      // holds the authors that were added, `skipped` one entry per row that
+      // was not, with the reason. Rows that made it drop off the table; the
+      // rest stay, each labelled with why, which beats navigating away as
+      // though everything succeeded.
+      const imported = data.imported || [];
+      const skipped = data.skipped || [];
+      const paths = imported.map((author) => author.path);
+      const importedPaths = new Set(paths);
+
+      // A lookup still waiting its turn for a row that has just been imported
+      // would spend a metered search on a row that no longer exists.
+      for (let i = queue.length - 1; i >= 0; i--) {
+        if (importedPaths.has(queue[i].id)) {
+          queue.splice(i, 1);
+        }
+      }
+
+      const actions = [
+        ...imported.map((author) => updateItem({ section: 'authors', ...author })),
 
         set({
           section,
@@ -259,11 +286,26 @@ export const actionHandlers = handleThunks({
           importError: null
         }),
 
-        removeImportedFolders({
-          paths: data.map((author) => author.path),
-          requestedCount: authors.length
-        })
-      ]));
+        removeImportedFolders({ paths, skipped })
+      ];
+
+      // The rows are seeded from the root folder's unmappedFolders, so the
+      // imported ones have to come out of that list too, or anything reading
+      // it before the next fetch still counts them as unmapped.
+      const rootFolder = getState().settings.rootFolders.items
+        .find((folder) => folder.id === state.rootFolderId);
+
+      if (rootFolder && rootFolder.unmappedFolders) {
+        actions.push(updateItem({
+          section: 'settings.rootFolders',
+          updateOnly: true,
+          id: rootFolder.id,
+          unmappedFolders: rootFolder.unmappedFolders
+            .filter((folder) => !importedPaths.has(folder.path))
+        }));
+      }
+
+      dispatch(batchActions(actions));
     });
 
     promise.fail((xhr) => {
@@ -300,7 +342,8 @@ export const reducers = createHandleActions({
       isPopulated: false,
       error: null,
       items: [],
-      selectedAuthor: undefined
+      selectedAuthor: undefined,
+      importOutcome: null
     }));
 
     return updateSectionState(state, section, newState);
@@ -308,15 +351,29 @@ export const reducers = createHandleActions({
 
   [REMOVE_IMPORTED_FOLDERS]: function(state, { payload }) {
     const newState = getSectionState(state, section);
-    const { paths, requestedCount } = payload;
+    const { paths, skipped = [] } = payload;
     const imported = new Set(paths);
 
-    newState.items = newState.items.filter((item) => !imported.has(item.path));
+    // Keyed by folder path, which the server echoes back untouched and which
+    // is also the row id. Rebuilt from scratch so an outcome from a previous
+    // attempt never outlives the attempt that replaced it.
+    const outcomes = skipped.reduce((acc, { path, reason, message }) => {
+      acc[path] = { reason, message };
+      return acc;
+    }, {});
+
+    newState.items = newState.items
+      .filter((item) => !imported.has(item.path))
+      .map((item) => {
+        const importOutcome = outcomes[item.path] || null;
+
+        return item.importOutcome || importOutcome ? { ...item, importOutcome } : item;
+      });
     newState.itemMap = newState.items.reduce((acc, item, index) => {
       acc[item.id] = index;
       return acc;
     }, {});
-    newState.failedCount = requestedCount - paths.length;
+    newState.skippedCount = skipped.length;
 
     return updateSectionState(state, section, newState);
   },
@@ -324,6 +381,12 @@ export const reducers = createHandleActions({
   [SET_LIBRARY_IMPORT_VALUE]: function(state, { payload }) {
     const newState = getSectionState(state, section);
     const { id, ...other } = payload;
+
+    // Picking a different author answers whatever the last import said about
+    // the old one.
+    if ('selectedAuthor' in other) {
+      other.importOutcome = null;
+    }
 
     newState.items = newState.items.map((item) => {
       return item.id === id ? { ...item, ...other } : item;

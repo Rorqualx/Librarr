@@ -142,5 +142,43 @@ namespace NzbDrone.Core.Test.MusicTests
 
             book.Editions.Value.Where(x => x.Monitored).Select(x => x.ForeignEditionId).Should().Equal("first-listed");
         }
+
+        // An import list item from OpenLibrary names a work and no edition
+        // at all, so there is nothing to match. It takes the same fallback.
+        [Test]
+        public void should_monitor_the_sources_pick_when_the_book_arrives_with_no_edition()
+        {
+            var newBook = BookToAdd("unused", "book", "author");
+            newBook.Editions = new List<Edition>();
+
+            GivenValidBook("book", "first-listed");
+            GivenValidPath();
+
+            _fakeBook.Editions.Value[0].Monitored = false;
+            _fakeBook.Editions.Value.Add(new Edition { ForeignEditionId = "source-pick", Monitored = true });
+
+            var book = Subject.AddBook(newBook);
+
+            book.Editions.Value.Where(x => x.Monitored).Select(x => x.ForeignEditionId).Should().Equal("source-pick");
+            book.Editions.Value.Single(x => x.Monitored).ManualAdd.Should().BeTrue();
+        }
+
+        [Test]
+        public void should_add_every_book_that_arrives_with_no_edition()
+        {
+            var newBook = BookToAdd("unused", "book", "author");
+            newBook.Editions = new List<Edition>();
+
+            GivenValidBook("book", "first-listed");
+            GivenValidPath();
+
+            var added = Subject.AddBooks(new List<Book> { newBook }, false);
+
+            added.Should().HaveCount(1);
+            added[0].Editions.Value.Where(x => x.Monitored).Select(x => x.ForeignEditionId).Should().Equal("first-listed");
+
+            Mocker.GetMock<IBookService>()
+                .Verify(v => v.AddBook(newBook, false), Times.Once());
+        }
     }
 }

@@ -68,6 +68,16 @@ namespace NzbDrone.Core.MediaFiles
 
             var settings = rootFolder.CalibreSettings;
 
+            // Calibre roots hold ebooks only (see CalibreFormats.IsAudio), and
+            // this is checked before the loop below because that loop deletes.
+            // The import specification turns the same condition into a
+            // readable rejection first; this is the backstop for any caller
+            // that gets here without going through it.
+            if (isCalibre && CalibreFormats.IsAudio(bookFile))
+            {
+                throw new CalibreException($"'{bookFile.Path}' is an audiobook and root folder '{rootFolder.Path}' is a Calibre library, which can only hold ebooks.");
+            }
+
             // If there are existing book files and the root folder is missing, throw, so the old file isn't left behind during the import process.
             if (existingFiles.Any() && !_diskProvider.FolderExists(rootFolderPath))
             {
@@ -89,12 +99,20 @@ namespace NzbDrone.Core.MediaFiles
                     {
                         _recycleBinProvider.DeleteFile(bookFilePath, subfolder);
                     }
-                    else
+                    else if (file.CalibreId > 0)
                     {
+                        // Only what this file answers for, not the record's
+                        // whole format list: the filter above decides which
+                        // BookFile rows are replaced, and says nothing about
+                        // what else the Calibre record is holding.
                         var existing = _calibre.GetBook(file.CalibreId, settings);
-                        var existingFormats = existing.Formats.Keys;
-                        _logger.Debug($"Removing existing formats {existingFormats.ConcatToString()} from calibre");
-                        _calibre.RemoveFormats(file.CalibreId, existingFormats, settings);
+                        var replacedFormats = CalibreFormats.OwnedBy(file, existing, settings);
+
+                        if (replacedFormats.Any())
+                        {
+                            _logger.Debug($"Removing existing formats {replacedFormats.ConcatToString()} from calibre");
+                            _calibre.RemoveFormats(file.CalibreId, replacedFormats, settings);
+                        }
                     }
                 }
 

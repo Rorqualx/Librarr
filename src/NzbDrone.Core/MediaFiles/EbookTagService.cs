@@ -172,6 +172,15 @@ namespace NzbDrone.Core.MediaFiles
             if (file.CalibreId == 0)
             {
                 _logger.Trace($"No calibre id for {file.Path}, skipping writing tags");
+                return;
+            }
+
+            // An audio row can carry a calibre id from before audio was kept
+            // out of Calibre; it is still not Calibre's file to rewrite.
+            if (CalibreFormats.IsAudio(file))
+            {
+                _logger.Trace($"{file.Path} is an audio file, skipping writing tags through calibre");
+                return;
             }
 
             var rootFolder = _rootFolderService.GetBestRootFolder(file.Path);
@@ -186,7 +195,7 @@ namespace NzbDrone.Core.MediaFiles
 
         private IEnumerable<RetagBookFilePreview> GetPreviews(List<BookFile> files)
         {
-            var calibreFiles = files.Where(x => x.CalibreId > 0).OrderBy(x => x.Edition.Value.Title).ToList();
+            var calibreFiles = files.Where(x => x.CalibreId > 0 && !CalibreFormats.IsAudio(x)).OrderBy(x => x.Edition.Value.Title).ToList();
 
             var rootFolderPairs = calibreFiles.Select(x => Tuple.Create(x, _rootFolderService.GetBestRootFolder(x.Path)));
 

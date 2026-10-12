@@ -113,6 +113,13 @@ namespace NzbDrone.Core.Update
                 _logger.Warn("Temporary location '{0}' has less than 1 GB free space, Readarr may not be able to update itself.", tempFolder);
             }
 
+            // The file name is whatever the update server sent. It names a file
+            // directly inside the sandbox and nothing else: no folders, no drive.
+            if (!IsPlainFileName(updatePackage.FileName))
+            {
+                throw new UpdateFailedException("Update package file name '{0}' is not a valid file name", updatePackage.FileName);
+            }
+
             var packageDestination = Path.Combine(updateSandboxFolder, updatePackage.FileName);
 
             if (_diskProvider.FolderExists(updateSandboxFolder))
@@ -283,6 +290,15 @@ namespace NzbDrone.Core.Update
             {
                 _commandQueueManager.Push(new ApplicationUpdateCommand(), trigger: message.Trigger);
             }
+        }
+
+        // Separators are checked for by character rather than through Path, so a
+        // name that only Windows would read as a path is refused everywhere.
+        private static bool IsPlainFileName(string fileName)
+        {
+            return fileName.IsNotNullOrWhiteSpace() &&
+                   fileName.IndexOfAny(new[] { '/', '\\', ':' }) < 0 &&
+                   fileName.Trim('.', ' ').Length > 0;
         }
 
         public void Execute(ApplicationUpdateCommand message)

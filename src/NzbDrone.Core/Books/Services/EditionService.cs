@@ -11,6 +11,7 @@ namespace NzbDrone.Core.Books
     public interface IEditionService
     {
         Edition GetEdition(int id);
+        List<Edition> FindEditions(IEnumerable<int> ids);
         Edition GetEditionByForeignEditionId(string foreignEditionId);
         List<Edition> GetAllMonitoredEditions();
         void InsertMany(List<Edition> editions);
@@ -42,6 +43,11 @@ namespace NzbDrone.Core.Books
         public Edition GetEdition(int id)
         {
             return _editionRepository.Get(id);
+        }
+
+        public List<Edition> FindEditions(IEnumerable<int> ids)
+        {
+            return _editionRepository.FindByIds(ids);
         }
 
         public Edition GetEditionByForeignEditionId(string foreignEditionId)
