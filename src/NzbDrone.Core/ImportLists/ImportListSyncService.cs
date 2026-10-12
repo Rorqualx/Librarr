@@ -140,7 +140,7 @@ namespace NzbDrone.Core.ImportLists
             var addedAuthors = _addAuthorService.AddAuthors(authorsToAdd, false);
             var addedBooks = _addBookService.AddBooks(booksToAdd, false);
 
-            var message = string.Format($"Import List Sync Completed. Items found: {items.Count}, Authors added: {authorsToAdd.Count}, Books added: {booksToAdd.Count}");
+            var message = string.Format($"Import List Sync Completed. Items found: {items.Count}, Authors added: {addedAuthors.Count}, Books added: {addedBooks.Count}");
 
             _logger.ProgressInfo(message);
 
@@ -337,7 +337,12 @@ namespace NzbDrone.Core.ImportLists
                     });
                 }
 
-                if (importList.ShouldMonitor == ImportListMonitorType.SpecificBook && toAddAuthor.AddOptions != null)
+                // Only an author this sync is about to add takes the book
+                // in its AddOptions. An author already in the DB can still
+                // carry AddOptions from its own add, until its first scan
+                // clears them; those are not ours to change, and the book
+                // is monitored through toAdd.Monitored instead.
+                if (importList.ShouldMonitor == ImportListMonitorType.SpecificBook && toAddAuthor.Id == 0 && toAddAuthor.AddOptions != null)
                 {
                     Debug.Assert(toAddAuthor.Id == 0, "new author added but ID is not 0");
                     toAddAuthor.AddOptions.BooksToMonitor.Add(toAdd.ForeignBookId);
