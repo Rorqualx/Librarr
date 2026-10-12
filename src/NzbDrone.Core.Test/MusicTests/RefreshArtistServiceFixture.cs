@@ -387,6 +387,88 @@ namespace NzbDrone.Core.Test.MusicTests
                 .Returns(true);
         }
 
+        // The author record and works list are cached for a day. Only a
+        // refresh the user asked for, of this one author, is worth a fresh
+        // fetch; everything else would multiply requests across the library.
+        private void GivenAuthorInfoCachedOrNot()
+        {
+            var newAuthorInfo = _author.JsonClone();
+            newAuthorInfo.Metadata = _author.Metadata.Value.JsonClone();
+            newAuthorInfo.Books = _remoteBooks;
+
+            Mocker.GetMock<IProvideAuthorInfo>()
+                .Setup(s => s.GetAuthorInfo(_author.ForeignAuthorId, It.IsAny<bool>()))
+                .Returns(newAuthorInfo);
+
+            GivenBooksForRefresh(_books);
+            AllowAuthorUpdate();
+
+            Mocker.GetMock<IAuthorService>(MockBehavior.Strict)
+                .Setup(s => s.GetAllAuthors())
+                .Returns(new List<Author> { _author });
+        }
+
+        private void VerifyAuthorFetched(Times fresh, Times cached)
+        {
+            Mocker.GetMock<IProvideAuthorInfo>().Verify(s => s.GetAuthorInfo(_author.ForeignAuthorId, false), fresh);
+            Mocker.GetMock<IProvideAuthorInfo>().Verify(s => s.GetAuthorInfo(_author.ForeignAuthorId, true), cached);
+        }
+
+        [Test]
+        public void manual_refresh_of_one_author_should_bypass_the_cache()
+        {
+            GivenAuthorInfoCachedOrNot();
+
+            Subject.Execute(new RefreshAuthorCommand(_author.Id) { Trigger = CommandTrigger.Manual });
+
+            VerifyAuthorFetched(fresh: Times.Once(), cached: Times.Never());
+        }
+
+        [TestCase(CommandTrigger.Scheduled)]
+        [TestCase(CommandTrigger.Unspecified)]
+        public void refresh_of_one_author_that_the_user_did_not_ask_for_should_use_the_cache(CommandTrigger trigger)
+        {
+            GivenAuthorInfoCachedOrNot();
+
+            Subject.Execute(new RefreshAuthorCommand(_author.Id) { Trigger = trigger });
+
+            VerifyAuthorFetched(fresh: Times.Never(), cached: Times.Once());
+        }
+
+        [Test]
+        public void manual_refresh_of_every_author_should_use_the_cache()
+        {
+            GivenAuthorInfoCachedOrNot();
+
+            Subject.Execute(new RefreshAuthorCommand { Trigger = CommandTrigger.Manual });
+
+            VerifyAuthorFetched(fresh: Times.Never(), cached: Times.Once());
+        }
+
+        [Test]
+        public void scheduled_refresh_of_every_author_should_use_the_cache()
+        {
+            GivenAuthorInfoCachedOrNot();
+
+            Mocker.GetMock<ICheckIfAuthorShouldBeRefreshed>()
+                .Setup(s => s.ShouldRefresh(_author))
+                .Returns(true);
+
+            Subject.Execute(ScheduledCommand(30));
+
+            VerifyAuthorFetched(fresh: Times.Never(), cached: Times.Once());
+        }
+
+        [Test]
+        public void manual_bulk_refresh_should_use_the_cache()
+        {
+            GivenAuthorInfoCachedOrNot();
+
+            Subject.Execute(new BulkRefreshAuthorCommand(new List<int> { _author.Id }) { Trigger = CommandTrigger.Manual });
+
+            VerifyAuthorFetched(fresh: Times.Never(), cached: Times.Once());
+        }
+
         private static RefreshAuthorCommand ScheduledCommand(int daysSinceLastRun)
         {
             return new RefreshAuthorCommand

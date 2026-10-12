@@ -85,11 +85,16 @@ namespace NzbDrone.Core.Books
         // the caller leaves it as it is and carries on. An exception means
         // the source itself is not answering, which is the caller's cue to
         // stop asking.
-        private Author GetSkyhookData(Book book)
+        //
+        // useCache is false only for a refresh the user asked for of this one
+        // book: see Execute(RefreshBookCommand). It applies to the book and
+        // its editions. The author is read through the cache regardless: that
+        // is the author's whole works list, and not what was asked for.
+        private Author GetSkyhookData(Book book, bool useCache)
         {
             try
             {
-                var tuple = _bookInfo.GetBookInfo(book.ForeignBookId);
+                var tuple = _bookInfo.GetBookInfo(book.ForeignBookId, useCache);
                 var author = _authorInfo.GetAuthorInfo(tuple.Item1);
                 var newbook = tuple.Item2;
 
@@ -200,7 +205,12 @@ namespace NzbDrone.Core.Books
             // the diff sees real editions. OpenLibraryProxy.GetBookInfo
             // memoizes the underlying HTTP resources for 7 days, so the
             // per-book fan-out is cheap on every refresh after the first.
-            var hydrated = GetSkyhookData(local);
+            //
+            // Always through the cache. This runs for every book of an author
+            // being refreshed; and when one book is refreshed by hand,
+            // RefreshBookInfo(book, useCache: false) has just fetched it and
+            // replaced the cached copy, so this reads what that put there.
+            var hydrated = GetSkyhookData(local, useCache: true);
             if (hydrated != null)
             {
                 var fullBook = hydrated.Books.Value.SingleOrDefault(x => x.ForeignBookId == local.ForeignBookId);
@@ -597,7 +607,7 @@ namespace NzbDrone.Core.Books
             return RefreshEntityInfo(book, remoteBooks, remoteData, true, forceUpdateFileTags, null);
         }
 
-        public bool RefreshBookInfo(Book book)
+        public bool RefreshBookInfo(Book book, bool useCache = true)
         {
             if (IsLeftAsItIs(book))
             {
@@ -615,7 +625,7 @@ namespace NzbDrone.Core.Books
                 return false;
             }
 
-            var data = GetSkyhookData(book);
+            var data = GetSkyhookData(book, useCache);
 
             // Could not be fetched; GetSkyhookData has said why.
             if (data == null)
@@ -642,7 +652,13 @@ namespace NzbDrone.Core.Books
             {
                 var book = _bookService.GetBook(message.BookId.Value);
 
-                RefreshBookInfo(book);
+                // The source's copy of a book is cached for a week. Someone
+                // who has just corrected the record there and pressed Refresh
+                // on this book expects to see the correction, so that one case
+                // asks afresh. Scheduled and bulk refreshes keep the cache.
+                var useCache = message.Trigger != CommandTrigger.Manual;
+
+                RefreshBookInfo(book, useCache);
             }
         }
     }
