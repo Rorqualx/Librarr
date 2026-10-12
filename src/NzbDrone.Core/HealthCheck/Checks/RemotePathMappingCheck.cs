@@ -127,6 +127,14 @@ namespace NzbDrone.Core.HealthCheck.Checks
             {
                 var failureMessage = (TrackImportFailedEvent)message;
 
+                // A rejected import was turned down by an import specification, nothing was
+                // attempted on disk. It says nothing about permissions or path mappings, so
+                // fall back to the regular check rather than diagnosing the file.
+                if (failureMessage.Rejected)
+                {
+                    return Check();
+                }
+
                 // if we can see the file exists but the import failed then likely a permissions issue
                 if (failureMessage.BookInfo != null)
                 {
