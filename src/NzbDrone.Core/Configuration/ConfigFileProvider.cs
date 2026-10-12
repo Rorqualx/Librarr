@@ -309,51 +309,67 @@ namespace NzbDrone.Core.Configuration
         {
             return _cache.Get(key, () =>
                 {
-                    var xDoc = LoadConfigFile();
-                    var config = xDoc.Descendants(CONFIG_ELEMENT_NAME).Single();
-
-                    var parentContainer = config;
-
-                    var valueHolder = parentContainer.Descendants(key).ToList();
-
-                    if (valueHolder.Count() == 1)
+                    // One read-change-write at a time, here and in SetValue
+                    // and DeleteOldValues. Each of them loads the whole file,
+                    // edits its copy and writes the whole file back; holding
+                    // the lock only around the load and the save let one
+                    // write back a copy from before another's change. On a
+                    // first start that lost the ApiKey element, or left the
+                    // file with a different key from the one cached here.
+                    // A second caller waiting on the lock then finds the
+                    // value the first one stored instead of its own default.
+                    lock (Mutex)
                     {
-                        return valueHolder.First().Value.Trim();
-                    }
+                        var xDoc = LoadConfigFile();
+                        var config = xDoc.Descendants(CONFIG_ELEMENT_NAME).Single();
 
-                    //Save the value
-                    if (persist)
-                    {
-                        SetValue(key, defaultValue);
-                    }
+                        var parentContainer = config;
 
-                    //return the default value
-                    return defaultValue.ToString();
+                        var valueHolder = parentContainer.Descendants(key).ToList();
+
+                        if (valueHolder.Count() == 1)
+                        {
+                            return valueHolder.First().Value.Trim();
+                        }
+
+                        //Save the value
+                        if (persist)
+                        {
+                            SetValue(key, defaultValue);
+                        }
+
+                        //return the default value
+                        return defaultValue.ToString();
+                    }
                 });
         }
 
         public void SetValue(string key, object value)
         {
             var valueString = value.ToString().Trim();
-            var xDoc = LoadConfigFile();
-            var config = xDoc.Descendants(CONFIG_ELEMENT_NAME).Single();
 
-            var parentContainer = config;
-
-            var keyHolder = parentContainer.Descendants(key);
-
-            if (keyHolder.Count() != 1)
+            lock (Mutex)
             {
-                parentContainer.Add(new XElement(key, valueString));
-            }
-            else
-            {
-                parentContainer.Descendants(key).Single().Value = valueString;
-            }
+                var xDoc = LoadConfigFile();
+                var config = xDoc.Descendants(CONFIG_ELEMENT_NAME).Single();
 
-            _cache.Set(key, valueString);
+                var parentContainer = config;
 
-            SaveConfigFile(xDoc);
+                var keyHolder = parentContainer.Descendants(key);
+
+                if (keyHolder.Count() != 1)
+                {
+                    parentContainer.Add(new XElement(key, valueString));
+                }
+                else
+                {
+                    parentContainer.Descendants(key).Single().Value = valueString;
+                }
+
+                _cache.Set(key, valueString);
+
+                SaveConfigFile(xDoc);
+            }
         }
 
         public void SetValue(string key, Enum value)
@@ -385,23 +401,26 @@ namespace NzbDrone.Core.Configuration
 
         private void DeleteOldValues()
         {
-            var xDoc = LoadConfigFile();
-            var config = xDoc.Descendants(CONFIG_ELEMENT_NAME).Single();
-
-            var type = GetType();
-            var properties = type.GetProperties();
-
-            foreach (var configValue in config.Descendants().ToList())
+            lock (Mutex)
             {
-                var name = configValue.Name.LocalName;
+                var xDoc = LoadConfigFile();
+                var config = xDoc.Descendants(CONFIG_ELEMENT_NAME).Single();
 
-                if (!properties.Any(p => p.Name == name))
+                var type = GetType();
+                var properties = type.GetProperties();
+
+                foreach (var configValue in config.Descendants().ToList())
                 {
-                    config.Descendants(name).Remove();
-                }
-            }
+                    var name = configValue.Name.LocalName;
 
-            SaveConfigFile(xDoc);
+                    if (!properties.Any(p => p.Name == name))
+                    {
+                        config.Descendants(name).Remove();
+                    }
+                }
+
+                SaveConfigFile(xDoc);
+            }
         }
 
         private XDocument LoadConfigFile()
