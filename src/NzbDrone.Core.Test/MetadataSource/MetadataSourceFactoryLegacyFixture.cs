@@ -209,6 +209,15 @@ namespace NzbDrone.Core.Test.MetadataSource
             Subject.IsUnmappedLegacyBook(WorkOlid).Should().BeFalse();
         }
 
+        // Mapped or not: where the book came from does not change when
+        // its match is confirmed.
+        [Test]
+        public void should_call_a_readarr_id_legacy_whether_or_not_it_is_mapped()
+        {
+            Subject.IsLegacyBook(LegacyBook).Should().BeTrue();
+            Subject.IsLegacyBook(WorkOlid).Should().BeFalse();
+        }
+
         [Test]
         public void should_ask_the_source_for_the_olid_of_a_mapped_author()
         {

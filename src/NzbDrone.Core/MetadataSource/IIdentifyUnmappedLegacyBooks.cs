@@ -13,6 +13,14 @@ namespace NzbDrone.Core.MetadataSource
         // through it.
         bool IsUnmappedLegacyBook(string foreignBookId);
 
+        // True for any book that still carries its pre-OpenLibrary id,
+        // mapped or not. Such a book is in the library because the user had
+        // it in Readarr. Its mapping came from reidentify, and a confident
+        // match can still be the wrong author or work, so "the matched
+        // author's list does not have it" is a statement about the match,
+        // not about the book.
+        bool IsLegacyBook(string foreignBookId);
+
         // The same question about an author. Asking the source for such an
         // author sends it an id it has never heard of.
         bool IsUnmappedLegacyAuthor(string foreignAuthorId);

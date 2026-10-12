@@ -1,14 +1,19 @@
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Xml.Linq;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Common.Cache;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Options;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Lifecycle;
 using NzbDrone.Test.Common;
 
 namespace NzbDrone.Common.Test
@@ -200,6 +205,37 @@ namespace NzbDrone.Common.Test
 
             Subject.Port.Should().Be(port);
             Subject.SslPort.Should().Be(sslPort);
+        }
+
+        // On a first start the web host is already answering while the
+        // ApplicationStartedEvent handler tidies config.xml. Each side reads
+        // the file, changes its copy and writes it back. Unless one whole
+        // read-change-write excludes the other, the handler writes back a
+        // copy from before the key existed, or two requests each generate a
+        // key: the server then holds a key that is not the one in the file,
+        // and every client that reads the file gets 401 until a restart.
+        [Test]
+        public void api_key_in_the_file_should_be_the_one_in_use_after_a_concurrent_first_start()
+        {
+            for (var i = 0; i < 300; i++)
+            {
+                _configFileContents = null;
+                Mocker.Resolve<ICacheManager>().GetCache<string>(typeof(ConfigFileProvider)).Clear();
+
+                string first = null;
+                string second = null;
+
+                Parallel.Invoke(
+                    () => first = Subject.ApiKey,
+                    () => Subject.HandleAsync(new ApplicationStartedEvent()),
+                    () => second = Subject.ApiKey);
+
+                var inFile = XDocument.Parse(_configFileContents).Descendants("ApiKey").SingleOrDefault()?.Value;
+
+                first.Should().Be(second, "run {0}", i);
+                inFile.Should().Be(Subject.ApiKey, "run {0}", i);
+                inFile.Should().Be(first, "run {0}", i);
+            }
         }
 
         [Test]

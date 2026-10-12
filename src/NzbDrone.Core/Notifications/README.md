@@ -16,7 +16,6 @@ service; all derive from `NotificationBase`.
 - `Telegram/` — Telegram bot.
 - `Webhook/` — generic JSON POST.
 - `Synology/` — DSM notifications.
-- `Trakt/`, `Goodreads/` — outbound list updates.
 
 ## Lifecycle hooks
 
