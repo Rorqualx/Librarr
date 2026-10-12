@@ -121,11 +121,40 @@ function Wait-Until([scriptblock]$Condition, [int]$TimeoutSec, [string]$What) {
     throw "TIMED OUT after ${TimeoutSec}s waiting for: $What"
 }
 
+# The app creates its API key lazily on first start: config.xml exists
+# before it has an ApiKey element, and requests arriving together can each
+# generate one, the last write winning. /ping answers through all of that.
+# So a first-start reader waits for the element, and Wait-ApiStatus below
+# reads the key again on every attempt instead of trusting the first one.
+function Read-ApiKey([string]$ConfigPath) {
+    try {
+        return "$(([xml](Get-Content -LiteralPath $ConfigPath -Raw -ErrorAction Stop)).Config.ApiKey)"
+    }
+    catch {
+        return ''
+    }
+}
+
 function Get-ApiKey([string]$ConfigPath) {
     Assert (Test-Path -LiteralPath $ConfigPath) "config.xml was generated at $ConfigPath"
-    $key = ([xml](Get-Content -LiteralPath $ConfigPath -Raw)).Config.ApiKey
-    Assert (-not [string]::IsNullOrWhiteSpace($key)) 'config.xml contains an ApiKey'
-    return $key
+    Wait-Until { -not [string]::IsNullOrWhiteSpace((Read-ApiKey $ConfigPath)) } 30 'config.xml contains an ApiKey'
+    return Read-ApiKey $ConfigPath
+}
+
+function Wait-ApiStatus([string]$ConfigPath) {
+    $script:apiStatus = $null
+    Wait-Until {
+        try {
+            $script:apiStatus = Get-Status (Read-ApiKey $ConfigPath)
+            return $true
+        }
+        catch {
+            Write-Host "  status not answering yet: $($_.Exception.Message)"
+            return $false
+        }
+    } 30 '/system/status accepts the key in config.xml'
+
+    return $script:apiStatus
 }
 
 function Get-Status([string]$ApiKey) {
@@ -328,8 +357,8 @@ function Invoke-ConsoleStage {
     try {
         Wait-Until { Test-Ping } 180 "$BaseUrl/ping answers"
 
+        $status = Wait-ApiStatus (Join-Path $data 'config.xml')
         $apiKey = Get-ApiKey (Join-Path $data 'config.xml')
-        $status = Get-Status $apiKey
         Assert-Status $status 'console'
         Assert ("$($status.appData)".TrimEnd('\') -ieq $data.TrimEnd('\')) "status.appData is the -data folder (got '$($status.appData)')"
 
@@ -371,8 +400,8 @@ function Invoke-ConsoleStage {
         Write-Host "  parent PID $parentId, still running: $parentAlive"
         Assert (-not $parentAlive) 'the parent process of the app has exited'
 
+        Assert-Status (Wait-ApiStatus (Join-Path $orphanData 'config.xml')) 'console'
         $apiKey = Get-ApiKey (Join-Path $orphanData 'config.xml')
-        Assert-Status (Get-Status $apiKey) 'console'
 
         $log = Get-LogText $orphanData
         Assert ($log -match 'Starting Readarr - ') 'the file log was already being written when the application mode was chosen'
@@ -397,25 +426,7 @@ function Assert-ServiceAnswers {
     Wait-ServiceStatus 'Running'
     Wait-Until { Test-Ping } 180 "$BaseUrl/ping answers from the service"
 
-    # /ping answers before first-start initialisation has finished, and on a
-    # first-ever start config.xml can still be rewritten in that window: a
-    # key read then was refused with 401 a few hundred milliseconds after
-    # "Now listening" (seen once in CI, 2026-10-12). Read the key again on
-    # each attempt rather than holding on to the first one.
-    Wait-Until {
-        try {
-            $key = ([xml](Get-Content -LiteralPath (Join-Path $DataDir 'config.xml') -Raw)).Config.ApiKey
-            $script:serviceStatus = Get-Status $key
-            return $true
-        }
-        catch {
-            Write-Host "  status not answering yet: $($_.Exception.Message)"
-            return $false
-        }
-    } 30 'the service answers /system/status with the key in config.xml'
-
-    $apiKey = Get-ApiKey (Join-Path $DataDir 'config.xml')
-    Assert-Status $script:serviceStatus 'service'
+    Assert-Status (Wait-ApiStatus (Join-Path $DataDir 'config.xml')) 'service'
 }
 
 function Invoke-ServiceStage {
