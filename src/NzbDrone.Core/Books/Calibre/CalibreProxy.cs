@@ -76,9 +76,24 @@ namespace NzbDrone.Core.Books.Calibre
                 .FirstOrDefault().Value?.Path;
         }
 
+        public static string GetFormatPath(Dictionary<string, CalibreBookFormat> formats, string format)
+        {
+            return formats
+                .FirstOrDefault(x => x.Key.Equals(format, StringComparison.OrdinalIgnoreCase))
+                .Value?.Path;
+        }
+
         public BookFile AddAndConvert(BookFile file, CalibreSettings settings)
         {
             _logger.Trace($"Importing to calibre: {file.Path} calibre id: {file.CalibreId}");
+
+            // Nothing below is safe for audio: it would be added as a second
+            // Calibre book, its path would never be learned back, and the
+            // conversion loop would ask Calibre to turn it into an ebook.
+            if (CalibreFormats.IsAudio(file))
+            {
+                throw new CalibreException($"'{file.Path}' is an audiobook; Calibre libraries can only hold ebooks.");
+            }
 
             if (file.CalibreId == 0)
             {
@@ -96,14 +111,19 @@ namespace NzbDrone.Core.Books.Calibre
             {
                 _logger.Trace($"Getting book data for {file.CalibreId}");
                 var options = GetBookData(file.CalibreId, settings);
-                var inputFormat = file.Quality.Quality.Name.ToUpper();
+
+                // The format Calibre holds the file under is its extension.
+                // The quality name is not the same thing: a .kepub is EPUB
+                // quality and a .azw is MOBI quality, and asking Calibre to
+                // convert from a format the record does not have fails.
+                var inputFormat = CalibreFormats.Format(file.Path).ToUpper();
 
                 options.Conversion_options.Input_fmt = inputFormat;
 
-                var formats = settings.OutputFormat.Split(',').Select(x => x.Trim());
-                foreach (var format in formats)
+                foreach (var format in CalibreFormats.OutputFormats(settings))
                 {
-                    if (format.ToLower() == inputFormat ||
+                    if (format.Equals(inputFormat, StringComparison.OrdinalIgnoreCase) ||
+                        CalibreFormats.IsAudio(format) ||
                         options.Input_formats.Contains(format, StringComparer.OrdinalIgnoreCase))
                     {
                         continue;
@@ -166,7 +186,15 @@ namespace NzbDrone.Core.Books.Calibre
 
         public void DeleteBooks(List<BookFile> books, CalibreSettings settings)
         {
-            var idString = books.Where(x => x.CalibreId != 0).Select(x => x.CalibreId).ConcatToString(",");
+            var ids = books.Where(x => x.CalibreId != 0).Select(x => x.CalibreId).Distinct().ToList();
+
+            // With nothing to delete the id segment of the url would be empty.
+            if (ids.Empty())
+            {
+                return;
+            }
+
+            var idString = ids.ConcatToString(",");
             var request = GetBuilder($"cdb/delete-books/{idString}/{settings.Library}", settings).Build();
             _httpClient.Post(request);
         }
@@ -274,7 +302,11 @@ namespace NzbDrone.Core.Books.Calibre
             // updating the calibre metadata may have renamed the file, so track that
             var updated = GetBook(file.CalibreId, settings);
 
-            var updatedPath = GetOriginalFormat(updated.Formats);
+            // Follow this file's own format. The oldest text format on the
+            // record is only the same thing when Librarr put every format
+            // there; once a record can keep a format the user added, the
+            // oldest one may be a different file from the one being tracked.
+            var updatedPath = GetFormatPath(updated.Formats, CalibreFormats.Format(file.Path)) ?? GetOriginalFormat(updated.Formats);
 
             _logger.Trace("File path from Calibre: '{0}'", updatedPath);
 
