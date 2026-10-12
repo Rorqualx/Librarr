@@ -32,6 +32,10 @@ namespace NzbDrone.App.Test
             Subject.Route(ApplicationModes.InstallService);
 
             serviceProviderMock.Verify(c => c.Install(ServiceProvider.SERVICE_NAME), Times.Once());
+
+            // The service account has to be able to write what this (elevated)
+            // process has just created in the data folder.
+            Mocker.GetMock<IAppFolderFactory>().Verify(c => c.SetPermissions(), Times.Once());
         }
 
         [Test]

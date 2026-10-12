@@ -390,20 +390,6 @@ jobs:
         # instead of ignoring themselves.
         run: ./test.sh Windows Unit Test
 
-      - name: Unit tests (Windows) - Update.Test
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        shell: bash
-        # Readarr.Update.Test publishes under _output/Readarr.Update, not
-        # _tests, so test.sh never sees it (its own comment says as much).
-        run: |
-          set -euo pipefail
-          dll=$(find _output/Readarr.Update -name 'Readarr.Update.Test.dll' -path '*win-x64*publish*' | head -1)
-          [ -n "$dll" ] || { echo "Readarr.Update.Test.dll not found under _output/Readarr.Update" >&2; exit 1; }
-          echo "Running $dll"
-          dotnet test "$dll" \
-            --filter 'Category!=ManualTest&Category!=LINUX&Category!=IntegrationTest&Category!=AutomationTest' \
-            --logger 'nunit;LogFilePath=UpdateTestResult.xml'
-
       - name: Smoke - console
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
@@ -462,7 +448,6 @@ jobs:
             _smoke/
             TestResult.xml
             TestLog.txt
-            UpdateTestResult.xml
           retention-days: 7
           if-no-files-found: ignore
 

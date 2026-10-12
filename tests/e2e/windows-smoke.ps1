@@ -201,6 +201,10 @@ function Save-Diagnostics([string]$Name) {
         & sc.exe queryex $ServiceName 2>&1
         '--- processes'
         Get-Process -Name 'Readarr*' -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, StartTime, Path -AutoSize | Out-String
+        "--- owner, size, path under $DataDir"
+        Get-ChildItem -LiteralPath $DataDir -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            "{0,-28} {1,10} {2}" -f (Get-Acl -LiteralPath $_.FullName).Owner, $(if ($_.PSIsContainer) { '<dir>' } else { $_.Length }), $_.FullName
+        }
         "--- icacls $DataDir"
         & icacls.exe $DataDir 2>&1
         "--- icacls $DataDir\bin"
