@@ -14,6 +14,7 @@ using NzbDrone.Core.Books;
 using NzbDrone.Core.Books.Events;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.Test.Framework;
+using NzbDrone.Test.Common;
 
 namespace NzbDrone.Core.Test.MediaCoverTests
 {
@@ -44,10 +45,65 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             _book = Builder<Book>.CreateNew()
                 .With(v => v.Id = 4)
                 .With(v => v.Editions = new List<Edition> { _edition })
+                .With(v => v.PreferredCoverUrl = null)
                 .Build();
 
             _httpResponse = new HttpResponse(null, new HttpHeader(), "");
             Mocker.GetMock<IHttpClient>().Setup(c => c.Get(It.IsAny<HttpRequest>())).Returns(_httpResponse);
+        }
+
+        [Test]
+        public void should_download_pinned_open_library_cover()
+        {
+            const string pinned = "https://covers.openlibrary.org/b/id/8231856-L.jpg";
+
+            _book.PreferredCoverUrl = pinned;
+
+            Subject.EnsureBookCovers(_book);
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(c => c.DownloadFile(pinned, It.Is<string>(f => f.EndsWith("cover.jpg")), It.IsAny<string>(), It.IsAny<TimeSpan?>()), Times.Once());
+        }
+
+        // A pin that was stored before the API started refusing these, or that
+        // was written straight into the database, must not be fetched.
+        [TestCase("http://127.0.0.1:8787/initialize.svg")]
+        [TestCase("https://localhost/cover.svg")]
+        [TestCase("https://example.com/cover.jpg")]
+        [TestCase("https://covers.openlibrary.org/b/id/8231856-L.svg")]
+        [TestCase("file:///etc/passwd")]
+        public void should_ignore_pinned_cover_that_is_not_an_open_library_image(string pinned)
+        {
+            const string editionCover = "https://covers.openlibrary.org/b/id/42-L.jpg";
+
+            _edition.Images = new List<MediaCover.MediaCover> { new MediaCover.MediaCover(MediaCoverTypes.Cover, editionCover) };
+            _book.PreferredCoverUrl = pinned;
+
+            Subject.EnsureBookCovers(_book);
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(c => c.Get(It.Is<HttpRequest>(r => r.Url.FullUri != editionCover)), Times.Never());
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(c => c.DownloadFile(It.Is<string>(u => u != editionCover), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan?>()), Times.Never());
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(c => c.DownloadFile(editionCover, It.Is<string>(f => f.EndsWith("cover.jpg")), It.IsAny<string>(), It.IsAny<TimeSpan?>()), Times.Once());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_not_fetch_anything_for_unusable_pin_when_no_edition_is_monitored()
+        {
+            _edition.Monitored = false;
+            _book.PreferredCoverUrl = "http://127.0.0.1:8787/initialize.svg";
+
+            Subject.EnsureBookCovers(_book);
+
+            Mocker.GetMock<IHttpClient>().Verify(c => c.Get(It.IsAny<HttpRequest>()), Times.Never());
+
+            ExceptionVerification.ExpectedWarns(1);
         }
 
         [TestCase(".png")]

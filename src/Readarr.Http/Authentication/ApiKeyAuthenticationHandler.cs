@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
@@ -60,7 +62,7 @@ namespace Readarr.Http.Authentication
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
-            if (_apiKey == providedApiKey)
+            if (ApiKeyMatches(_apiKey, providedApiKey))
             {
                 var claims = new List<Claim>
                 {
@@ -76,6 +78,23 @@ namespace Readarr.Http.Authentication
             }
 
             return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
+        // Compared in constant time so that how long a rejection takes says
+        // nothing about how much of the supplied key was right. Both sides are
+        // hashed first: FixedTimeEquals returns early on a length mismatch, and
+        // comparing digests keeps the key's length out of the timing as well.
+        public static bool ApiKeyMatches(string expectedApiKey, string providedApiKey)
+        {
+            if (string.IsNullOrWhiteSpace(expectedApiKey) || providedApiKey == null)
+            {
+                return false;
+            }
+
+            var expected = SHA256.HashData(Encoding.UTF8.GetBytes(expectedApiKey));
+            var provided = SHA256.HashData(Encoding.UTF8.GetBytes(providedApiKey));
+
+            return CryptographicOperations.FixedTimeEquals(expected, provided);
         }
 
         protected override Task HandleChallengeAsync(AuthenticationProperties properties)

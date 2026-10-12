@@ -225,7 +225,18 @@ namespace NzbDrone.Core.MediaCover
             // cover-download loop in HandleAsync. Skip these defensively
             // — there's no cover to download when there's no edition.
             var monitoredEdition = book.Editions.Value.FirstOrDefault(x => x.Monitored);
-            if (monitoredEdition == null && book.PreferredCoverUrl.IsNullOrWhiteSpace())
+
+            // The API refuses a pin that is not an Open Library cover image, but
+            // this is where the URL gets fetched and its extension becomes a file
+            // name, so check again rather than trust whatever is in the database.
+            var pinnedCoverUrl = book.PreferredCoverUrl;
+            if (!pinnedCoverUrl.IsNullOrWhiteSpace() && !PinnedCoverUrl.IsAllowed(pinnedCoverUrl))
+            {
+                _logger.Warn("Ignoring pinned cover for {0}, it is not an image on {1}", book, PinnedCoverUrl.AllowedHost);
+                pinnedCoverUrl = null;
+            }
+
+            if (monitoredEdition == null && pinnedCoverUrl.IsNullOrWhiteSpace())
             {
                 return;
             }
@@ -234,8 +245,8 @@ namespace NzbDrone.Core.MediaCover
             // whatever the mapper put on the monitored edition. Mapper
             // default (work.covers[0]) is the second choice; the edition
             // cover fallback URLs follow that in the Images list.
-            var coverSources = !book.PreferredCoverUrl.IsNullOrWhiteSpace()
-                ? new List<MediaCover> { new MediaCover(MediaCoverTypes.Cover, book.PreferredCoverUrl) }
+            var coverSources = !pinnedCoverUrl.IsNullOrWhiteSpace()
+                ? new List<MediaCover> { new MediaCover(MediaCoverTypes.Cover, pinnedCoverUrl) }
                 : monitoredEdition.Images.Where(e => e.CoverType == MediaCoverTypes.Cover).ToList();
 
             foreach (var cover in coverSources)

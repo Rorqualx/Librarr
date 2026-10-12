@@ -16,6 +16,8 @@ namespace Readarr.Http.Frontend.Mappers
             _appFolderInfo = appFolderInfo;
         }
 
+        protected override string RootFolder => _appFolderInfo.GetLogFolder();
+
         public override string Map(string resourceUrl)
         {
             var path = resourceUrl.Replace('/', Path.DirectorySeparatorChar);
