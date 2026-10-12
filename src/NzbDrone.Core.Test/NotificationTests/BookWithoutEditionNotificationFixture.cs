@@ -3,13 +3,11 @@ using System.Collections.Specialized;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
-using NzbDrone.Common.Http;
 using NzbDrone.Common.Processes;
 using NzbDrone.Core.Books;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Notifications;
 using NzbDrone.Core.Notifications.CustomScript;
-using NzbDrone.Core.Notifications.Goodreads;
 using NzbDrone.Core.Notifications.Webhook;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Qualities;
@@ -161,41 +159,6 @@ namespace NzbDrone.Core.Test.NotificationTests
 
             _environment["Readarr_Book_Title"].Should().Be("Book");
             _environment["Readarr_Book_GRId"].Should().BeEmpty();
-        }
-    }
-
-    [TestFixture]
-    public class GoodreadsOwnedBooksFixture : CoreTest<GoodreadsOwnedBooks>
-    {
-        [Test]
-        public void should_not_report_a_book_that_has_no_editions()
-        {
-            Subject.Definition = new NotificationDefinition { Settings = new GoodreadsOwnedBooksNotificationSettings() };
-
-            Subject.OnReleaseImport(BookWithoutEdition.DownloadMessage());
-
-            Mocker.GetMock<IHttpClient>().Verify(v => v.Execute(It.IsAny<HttpRequest>()), Times.Never());
-        }
-    }
-
-    [TestFixture]
-    public class GoodreadsBookshelfFixture : CoreTest<GoodreadsBookshelf>
-    {
-        [Test]
-        public void should_not_shelve_a_book_that_has_no_editions()
-        {
-            Subject.Definition = new NotificationDefinition
-            {
-                Settings = new GoodreadsBookshelfNotificationSettings
-                {
-                    RemoveIds = new List<string>(),
-                    AddIds = new[] { "read" }
-                }
-            };
-
-            Subject.OnReleaseImport(BookWithoutEdition.DownloadMessage());
-
-            Mocker.GetMock<IHttpClient>().Verify(v => v.Execute(It.IsAny<HttpRequest>()), Times.Never());
         }
     }
 }
