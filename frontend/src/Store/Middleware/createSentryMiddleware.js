@@ -96,12 +96,18 @@ export default function createSentryMiddleware() {
     isProduction
   } = window.Readarr;
 
-  if (!analytics) {
+  // Upstream hard-coded Readarr's sentry.servarr.com DSNs here, so with
+  // analytics on (the default) every browser reported UI errors, with the
+  // redux state attached, to the retired upstream project's server. The
+  // backend stopped doing the same in NzbDroneLogger.RegisterSentry; this is
+  // the other half. Librarr has no crash-reporting service of its own, so
+  // nothing is reported unless the page is handed a DSN, which nothing does
+  // today.
+  const dsn = window.Readarr.sentryDsn;
+
+  if (!analytics || !dsn) {
     return;
   }
-
-  const dsn = isProduction ? 'https://e4883dadbabf4eb0abdd97c96ec16cd8@sentry.servarr.com/7' :
-    'https://a0ec920735ed4e3e9d27d2cdd9c733bf@sentry.servarr.com/8';
 
   sentry.init({
     dsn,

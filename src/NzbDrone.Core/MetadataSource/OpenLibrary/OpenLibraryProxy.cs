@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Threading;
@@ -28,7 +29,29 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
     // compose cleanly with HttpResponse<T> covariance — see commit msg).
     public class OpenLibraryProxy
     {
+        // An author's works are read a thousand at a time (the most OL serves
+        // in one response) for at most this many pages. Ten thousand works is
+        // several times the largest bibliography seen -- Asimov's 1455 -- and
+        // an author past it is logged rather than followed indefinitely. See
+        // FetchAllWorks.
+        internal const int WorksPageSize = 1000;
+        internal const int MaxWorksPages = 10;
+
+        // One page of a work's editions, and deliberately no more: Pride and
+        // Prejudice has 4038 and Frankenstein 2185 (both captured), and every
+        // edition fetched becomes a row. See FetchWorkBundle.
+        internal const int EditionsPageSize = 200;
+
         private const int MaxRetries = 3;
+
+        // The longest a single Retry-After will be honoured for. Every call
+        // into this class is synchronous, on a command thread or inside an API
+        // request the UI is waiting on, and there can be three waits per
+        // request -- so this bounds one request's server-directed waiting at
+        // thirty seconds, the same order as the 2s/4s/8s schedule it replaces.
+        // A server asking for longer is not saying "try again shortly", and
+        // gets a failure the breaker counts instead (see SendCore).
+        internal static readonly TimeSpan MaxRetryAfter = TimeSpan.FromSeconds(10);
         private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(2);
 
         private readonly IHttpClient _httpClient;
@@ -59,33 +82,126 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
             // downstream code (BookService.AddBook, BasicRepository.Insert)
             // mutates Book/Edition fields in place — so a cached *mapped*
             // payload leaks Id/BookId/Monitored mutations across calls.
+            //
+            // useCache: false fetches fresh *and replaces* the cached copy --
+            // see Cached().
             var resources = Cached(useCache, $"oa_{foreignAuthorId}", TimeSpan.FromHours(24), () =>
             {
-                var authorReq = _requestBuilder.For($"authors/{foreignAuthorId}.json").Build();
+                // The author document first, because it decides whose works to
+                // ask for. A merged author is served as a redirect document,
+                // and the merged-away id has no works of its own: fetching
+                // authors/{old}/works.json alongside it would pair the
+                // surviving record with an empty discography.
+                var (authorDoc, resolvedId) = FetchDocument<OpenLibraryAuthorResource>("authors", foreignAuthorId);
 
-                // OL accepts limit=1000 in a single response (verified:
-                // Le Guin's 252 works returned 251 entries at limit=1000
-                // vs 200 at limit=200, clipping The Dispossessed off
-                // the end and out of the author's discography in the
-                // UI entirely). All prolific authors known today stay
-                // well under 1000 (Asimov ~500, King ~600, Le Guin 252).
-                // When a future author exceeds this, the symptom is a
-                // clipped list (size > entries.Count) and the fix is
-                // to escalate to a paginated loop here — easy migration.
-                var worksReq = _requestBuilder.For($"authors/{foreignAuthorId}/works.json?limit=1000").Build();
-
-                var authorResp = Send<OpenLibraryAuthorResource>(authorReq);
-                var worksResp = Send<OpenLibraryAuthorWorksResource>(worksReq);
-
-                if (authorResp?.Resource == null)
+                if (authorDoc == null)
                 {
                     throw new OpenLibraryException("OL author not found: {0}", foreignAuthorId);
                 }
 
-                return (Author: authorResp.Resource, Works: worksResp?.Resource);
+                return (Author: authorDoc, Works: FetchAllWorks(resolvedId));
             });
 
             return OpenLibraryAuthorMapper.ToAuthor(resources.Author, resources.Works);
+        }
+
+        // An author's complete works list, read a page at a time.
+        //
+        // OL accepts limit=1000 in a single response (verified: Le Guin's 252
+        // works returned 251 entries at limit=1000 vs 200 at limit=200,
+        // clipping The Dispossessed off the end and out of the author's
+        // discography in the UI entirely). This used to stop there, on the
+        // reckoning that nobody has a thousand works -- "Asimov ~500". The
+        // captured author_asimov_works.json says 1455. Everything past the
+        // first page was silently absent, and absent is worse than it sounds:
+        // RefreshAuthorService treats the list as the author's bibliography,
+        // so a book that is not in it is not merely unlisted, it is a
+        // candidate for deletion.
+        //
+        // Whether there is more is OL's to say: a list response carries
+        // links.next when another page exists. `size` is not used for that --
+        // it counts records the list then leaves out (Le Guin's 252 against
+        // 251), so "fewer than size" would cost a pointless extra request on
+        // every refresh of such an author. It is the fallback only when a full
+        // page arrives with no links at all.
+        //
+        // Each page is an ordinary Send(): rate-limited, retried, counted by
+        // the breaker. The pages are stitched into one resource and cached as
+        // one, so paging costs nothing on a cache hit and one extra request
+        // per thousand works on a miss. A page that fails fails the whole
+        // fetch, deliberately -- a partial list handed to the refresh is the
+        // deletion hazard above.
+        private OpenLibraryAuthorWorksResource FetchAllWorks(string authorId)
+        {
+            var path = $"authors/{authorId}/works.json?limit={WorksPageSize}";
+
+            var works = Send<OpenLibraryAuthorWorksResource>(_requestBuilder.For(path).Build())?.Resource;
+
+            if (works?.Entries == null)
+            {
+                return works;
+            }
+
+            var page = works;
+            var pages = 1;
+
+            while (HasNextPage(page, works))
+            {
+                // A bound, because every page is a request on a command thread
+                // and "there is more" is the server's word alone.
+                if (pages >= MaxWorksPages)
+                {
+                    _logger.Warn("OpenLibrary lists {0} works for author {1}; stopped after {2} pages ({3} works). The rest will be missing from this author's books", works.Size, authorId, pages, works.Entries.Count);
+                    break;
+                }
+
+                page = Send<OpenLibraryAuthorWorksResource>(_requestBuilder.For($"{path}&offset={works.Entries.Count}").Build())?.Resource;
+                pages++;
+
+                if (page?.Entries == null || page.Entries.Count == 0)
+                {
+                    // Promised a page and given nothing. Only worth saying if
+                    // it leaves the list short of what was advertised.
+                    if (works.Entries.Count < works.Size)
+                    {
+                        _logger.Warn("OpenLibrary lists {0} works for author {1} but returned only {2}; the next page came back empty. The rest will be missing from this author's books", works.Size, authorId, works.Entries.Count);
+                    }
+
+                    break;
+                }
+
+                works.Entries.AddRange(page.Entries);
+            }
+
+            return works;
+        }
+
+        private static bool HasNextPage(OpenLibraryAuthorWorksResource page, OpenLibraryAuthorWorksResource all)
+        {
+            if (page.Links != null)
+            {
+                return page.Links.Next.IsNotNullOrWhiteSpace();
+            }
+
+            return page.Entries.Count >= WorksPageSize && all.Entries.Count < all.Size;
+        }
+
+        // Whether OL has more editions of a work than the one page that was
+        // fetched. Same signal as the works list: links.next when the response
+        // has links, the count against `size` when it does not.
+        internal static bool IsTruncated(OpenLibraryEditionListResource editions)
+        {
+            if (editions?.Entries == null)
+            {
+                return false;
+            }
+
+            if (editions.Links != null)
+            {
+                return editions.Links.Next.IsNotNullOrWhiteSpace();
+            }
+
+            return editions.Entries.Count < editions.Size;
         }
 
         public HashSet<string> GetChangedAuthors(DateTime startTime)
@@ -98,9 +214,19 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
             return null;
         }
 
-        public Tuple<string, Book, List<AuthorMetadata>> GetBookInfo(string id)
+        // useCache mirrors GetAuthorInfo's parameter. The work bundle is held
+        // for seven days, which is right for an import walking a library and
+        // wrong for a user who has just corrected the record on OpenLibrary and
+        // pressed Refresh. Passing false fetches fresh and replaces the cached
+        // copy, so the cover picker and any later cached reader see the same
+        // data the refresh did.
+        //
+        // IProvideBookInfo.GetBookInfo has no such parameter yet, so nothing
+        // passes false today: the interface, MetadataSourceFactory and the
+        // refresh services need to carry it through.
+        public Tuple<string, Book, List<AuthorMetadata>> GetBookInfo(string id, bool useCache = true)
         {
-            var resources = FetchWorkBundle(id);
+            var resources = FetchWorkBundle(id, useCache);
 
             var (book, authors) = OpenLibraryWorkMapper.ToBook(resources.Work, resources.Editions);
 
@@ -174,12 +300,13 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
         // editions in cache would carry Ids that no longer correspond
         // to any DB row, and the retry path's SetMonitored assertion
         // would fire with Count(Monitored)==0.
-        private (Resources.OpenLibraryWorkResource Work, Resources.OpenLibraryEditionListResource Editions) FetchWorkBundle(string id)
+        private (Resources.OpenLibraryWorkResource Work, Resources.OpenLibraryEditionListResource Editions) FetchWorkBundle(string id, bool useCache = true)
         {
-            return Cached(true, $"ow_{id}", TimeSpan.FromDays(7), () =>
+            return Cached(useCache, $"ow_{id}", TimeSpan.FromDays(7), () =>
             {
-                var workReq = _requestBuilder.For($"works/{id}.json").Build();
-                var work = Send<Resources.OpenLibraryWorkResource>(workReq)?.Resource;
+                // As with authors: a merged work is a redirect document, and
+                // the editions hang off the surviving work, not the old id.
+                var (work, resolvedId) = FetchDocument<Resources.OpenLibraryWorkResource>("works", id);
                 if (work == null)
                 {
                     throw new OpenLibraryException("OL work not found: {0}", id);
@@ -193,11 +320,104 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                 // surfaced by the Le Guin investigation (LHoD has 91
                 // editions; cover candidates can plausibly cluster in
                 // the tail of works with audiobook/foreign reprints).
-                var editionsReq = _requestBuilder.For($"works/{id}/editions.json?limit=200").Build();
+                //
+                // The list is not paged, on purpose. A work can have
+                // thousands of editions and each one fetched is a row in the
+                // Editions table and a candidate in every match, so "fetch
+                // them all" is a design decision, not a bug fix. What must not
+                // happen is the cap going unnoticed: an edition past the first
+                // page cannot be matched by ISBN, picked in the UI, or offered
+                // by the cover picker, and nothing said so. (RefreshBookService
+                // already declines to delete a stored edition just because it
+                // fell outside this page.)
+                //
+                // Info, not Warn: most well-known books are over the cap, so
+                // this is the expected state for them rather than a fault.
+                // Logged here, inside the cache factory, so it is said once
+                // per fetch -- once a week per work -- not once per reader.
+                var editionsReq = _requestBuilder.For($"works/{resolvedId}/editions.json?limit={EditionsPageSize}").Build();
                 var editionsRes = Send<Resources.OpenLibraryEditionListResource>(editionsReq)?.Resource;
+
+                if (IsTruncated(editionsRes))
+                {
+                    _logger.Info("OpenLibrary lists {0} editions of work {1} ({2}); only the first {3} are fetched, so an edition beyond those cannot be matched or selected", editionsRes.Size, resolvedId, work.Title, editionsRes.Entries.Count);
+                }
 
                 return (Work: work, Editions: editionsRes);
             });
+        }
+
+        // Fetches authors/{id}.json or works/{id}.json and deals with the two
+        // ways OL says "that record is gone" while still answering 200:
+        //
+        //   { "type": { "key": "/type/redirect" }, "location": "/authors/OL2A" }
+        //       merged into another record -- follow it
+        //   { "type": { "key": "/type/delete" } }
+        //       removed -- there is nothing to follow
+        //
+        // Neither carries a name or a title. Mapped as though they were live
+        // records, the author one threw ArgumentNullException out of the mapper
+        // and the work one produced a book with no title.
+        //
+        // Returns the document together with the id it was finally read from,
+        // which differs from the id asked for after a redirect and is the one
+        // any follow-up request (works list, editions) has to use. A null
+        // document means not found; callers already have a path for that.
+        //
+        // One hop, deliberately. OL is meant to point a redirect at a live
+        // record, so a second redirect is either a loop or a chain nobody
+        // tidied, and following it open-endedly spends the rate limit on a
+        // record that may never resolve.
+        private (T Document, string Id) FetchDocument<T>(string collection, string id)
+            where T : class, IOpenLibraryDocument, new()
+        {
+            var document = Send<T>(_requestBuilder.For($"{collection}/{id}.json").Build())?.Resource;
+
+            if (document != null && OpenLibraryDocumentType.IsRedirect(document.Type))
+            {
+                var target = RedirectTarget(collection, document.Location);
+
+                if (target == null || target.Equals(id, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.Warn("OL {0}/{1} is a redirect with no usable target ('{2}'); treating it as not found", collection, id, document.Location);
+                    return (null, id);
+                }
+
+                _logger.Debug("OL {0}/{1} has been merged into {2}; following the redirect", collection, id, target);
+
+                id = target;
+                document = Send<T>(_requestBuilder.For($"{collection}/{id}.json").Build())?.Resource;
+
+                if (document != null && OpenLibraryDocumentType.IsRedirect(document.Type))
+                {
+                    _logger.Warn("OL {0}/{1} redirects a second time, to '{2}'; not following more than one hop, treating it as not found", collection, id, document.Location);
+                    return (null, id);
+                }
+            }
+
+            if (document != null && OpenLibraryDocumentType.IsDelete(document.Type))
+            {
+                _logger.Debug("OL {0}/{1} has been deleted", collection, id);
+                return (null, id);
+            }
+
+            return (document, id);
+        }
+
+        // "/authors/OL2A" -> "OL2A", but only when it points into the collection
+        // we asked about. The id goes straight back into a request path, so an
+        // author redirect naming a work (or anything else) is not followed.
+        private static string RedirectTarget(string collection, string location)
+        {
+            if (location.IsNullOrWhiteSpace() ||
+                !location.Trim().StartsWith($"/{collection}/", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var target = ExtractOlid(location.Trim());
+
+            return target.IsNullOrWhiteSpace() ? null : target;
         }
 
         public List<Author> SearchForNewAuthor(string title)
@@ -242,7 +462,9 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                 return new List<Author>();
             }
 
-            return Cached(true, $"osa_{term}", TimeSpan.FromHours(1), () =>
+            // The response is what is cached; the mapping runs per call. See
+            // the note above SearchForNewBook.
+            var resource = Cached(true, $"osa_{term}", TimeSpan.FromHours(1), () =>
             {
                 var req = _requestBuilder.For($"search/authors.json?q={Uri.EscapeDataString(term)}").Build();
                 req.SuppressHttpError = false;
@@ -256,11 +478,13 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                 }
                 catch (HttpException ex) when (ex.Response?.StatusCode == HttpStatusCode.UnprocessableEntity)
                 {
-                    return new List<Author>();
+                    return new OpenLibraryAuthorSearchResource();
                 }
 
-                return OpenLibrarySearchMapper.ReRankAndMapAuthors(resp?.Resource, term);
+                return resp?.Resource ?? new OpenLibraryAuthorSearchResource();
             });
+
+            return OpenLibrarySearchMapper.ReRankAndMapAuthors(resource, term);
         }
 
         // "OL does not have this record", as opposed to "the lookup failed".
@@ -309,6 +533,29 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                 : (term, null);
         }
 
+        // Every search method below caches what OpenLibrary *sent* and maps it
+        // afresh for each caller, the way GetAuthorInfo and FetchWorkBundle
+        // always have. They used to cache the mapped Book and Author objects,
+        // and LazyCache hands the same reference to everyone inside the TTL --
+        // to callers that write to what they are given:
+        //
+        //   - The lookup controllers pass the monitored edition's Images to
+        //     MediaCoverService.ConvertToLocalUrls, which rewrites Url in
+        //     place to a /MediaCoverProxy/ address. That registration lasts 24
+        //     hours; an isbn:/asin:/edition: result is cached for 30 days. So
+        //     the same search a day later was served a cover URL the proxy no
+        //     longer knew, and import identification, reading the same
+        //     instances, saw proxy paths where it expected OpenLibrary's.
+        //   - On an install with a URL base the rewritten URL did not match
+        //     the "already rewritten" guard, so a repeat inside the TTL wrapped
+        //     the proxy URL in a second proxy URL and broke the cover outright.
+        //   - CandidateService.ToCandidates attaches authors, series links and
+        //     Edition.Book back-references, and whatever then adds the book
+        //     assigns database ids -- the leak the GetAuthorInfo note warns of.
+        //
+        // Fixing each writer would leave the next one to find. Nothing a
+        // caller does to its result can reach the cache now, and the cost is
+        // re-running a mapper over at most twenty documents.
         public List<Book> SearchForNewBook(string title, string author, bool getAllEditions = true)
         {
             // OL's /search.json 422s on single-char queries — short-circuit
@@ -322,7 +569,7 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
 
             var cacheKey = $"os_{title}|{author}|{getAllEditions}";
 
-            return Cached(true, cacheKey, TimeSpan.FromHours(1), () =>
+            var resource = Cached(true, cacheKey, TimeSpan.FromHours(1), () =>
             {
                 string qs;
                 if (string.IsNullOrWhiteSpace(author))
@@ -357,33 +604,58 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                 }
                 catch (HttpException ex) when (ex.Response?.StatusCode == HttpStatusCode.UnprocessableEntity)
                 {
-                    return new List<Book>();
+                    return new OpenLibrarySearchResource();
                 }
 
-                return OpenLibrarySearchMapper.ReRankAndMap(resp?.Resource, title, author);
+                return resp?.Resource ?? new OpenLibrarySearchResource();
             });
+
+            return OpenLibrarySearchMapper.ReRankAndMap(resource, title, author);
         }
 
         public List<Book> SearchByIsbn(string isbn)
         {
-            var books = Cached(true, $"oisbn_{isbn}", TimeSpan.FromDays(30), () =>
+            OpenLibraryEditionResource[] editions;
+
+            // Same 404-is-not-an-error handling as SearchByForeignBookId and
+            // SearchForNewAuthor. An ISBN OL does not hold is the commonest
+            // miss of all, and it was the one that threw: `isbn:<unknown>` in
+            // the search box showed an error where the other prefixes show an
+            // empty list, and in ReidentifyService.MapBook the exception
+            // skipped the ASIN and title+author fallbacks for that book --
+            // the very lookups that exist for when the ISBN draws a blank.
+            //
+            // The catch sits outside Cached() so the miss is not what gets
+            // stored for 30 days, and it does not cover WithAuthorNames below,
+            // which has its own best-effort handling.
+            try
             {
-                var request = _requestBuilder.For($"isbn/{isbn}.json").Build();
-                request.AllowAutoRedirect = true;
-
-                var resp = Send<OpenLibraryEditionResource>(request);
-                if (resp?.Resource == null)
+                editions = Cached(true, $"oisbn_{isbn}", TimeSpan.FromDays(30), () =>
                 {
-                    return new List<Book>();
-                }
+                    var request = _requestBuilder.For($"isbn/{isbn}.json").Build();
+                    request.AllowAutoRedirect = true;
 
-                // The queried ISBN travels with the mapping: when the edition
-                // record lists no isbn_13 (or several isbn_10 printings), the
-                // mapper needs it to derive/select the right one — issue #10.
-                return new List<Book> { OpenLibraryEditionMapper.ToBook(resp.Resource, isbn) };
-            });
+                    return AsCacheable(Send<OpenLibraryEditionResource>(request)?.Resource);
+                });
+            }
+            catch (Exception ex) when (IsNotFound(ex))
+            {
+                return new List<Book>();
+            }
 
-            return WithAuthorNames(books);
+            // The queried ISBN travels with the mapping: when the edition
+            // record lists no isbn_13 (or several isbn_10 printings), the
+            // mapper needs it to derive/select the right one — issue #10.
+            return WithAuthorNames(editions.Select(e => OpenLibraryEditionMapper.ToBook(e, isbn)).ToList());
+        }
+
+        // The edition a lookup returned, as something that can sit in the
+        // cache: an array of one, or of none when the answer had no body. An
+        // empty answer is still an answer worth remembering, and an array says
+        // so without asking LazyCache what it does with a null.
+        private static OpenLibraryEditionResource[] AsCacheable(OpenLibraryEditionResource edition)
+        {
+            return edition == null ? Array.Empty<OpenLibraryEditionResource>() : new[] { edition };
         }
 
         // The /isbn/ and /books/ endpoints return author keys but no names, and
@@ -397,10 +669,11 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
         // days — turning a comfortable match into a borderline one long after
         // OL recovered. Out here, a failure simply means the next call retries.
         //
-        // The write lands on the cached Book instance, so a later cache hit
-        // gets the name for free. That instance is already shared (see the note
-        // on GetAuthorInfo below); this particular mutation is idempotent and
-        // only ever goes empty -> resolved.
+        // The books are mapped per call now (see the note above
+        // SearchForNewBook), so the name no longer rides along on a shared
+        // cached instance: it is resolved for every caller. That costs nothing
+        // on a repeat, because GetAuthorName and GetAuthorIdFromWork keep
+        // their own caches of exactly the two strings involved.
         private List<Book> WithAuthorNames(List<Book> books)
         {
             foreach (var book in books ?? new List<Book>())
@@ -501,8 +774,7 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
 
             try
             {
-                var req = _requestBuilder.For($"works/{foreignBookId}.json").Build();
-                var work = Send<Resources.OpenLibraryWorkResource>(req)?.Resource;
+                var (work, _) = FetchDocument<Resources.OpenLibraryWorkResource>("works", foreignBookId);
                 var authorKey = work?.Authors?.FirstOrDefault()?.Author?.Key;
                 var authorId = ExtractOlid(authorKey);
 
@@ -562,8 +834,10 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
 
             try
             {
-                var req = _requestBuilder.For($"authors/{foreignAuthorId}.json").Build();
-                var name = Send<OpenLibraryAuthorResource>(req)?.Resource?.Name;
+                // Through FetchDocument so that an edition still pointing at a
+                // merged-away author key gets the surviving record's name
+                // rather than the nothing a redirect document carries.
+                var name = FetchDocument<OpenLibraryAuthorResource>("authors", foreignAuthorId).Document?.Name;
 
                 if (name.IsNotNullOrWhiteSpace())
                 {
@@ -581,12 +855,14 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
 
         public List<Book> SearchByAsin(string asin)
         {
-            return Cached(true, $"oasin_{asin}", TimeSpan.FromDays(30), () =>
+            var resource = Cached(true, $"oasin_{asin}", TimeSpan.FromDays(30), () =>
             {
                 var req = _requestBuilder.For($"search.json?q=identifier%3A{Uri.EscapeDataString(asin)}&limit=5").Build();
                 var resp = Send<OpenLibrarySearchResource>(req);
-                return OpenLibrarySearchMapper.ReRankAndMap(resp?.Resource, asin, null);
+                return resp?.Resource ?? new OpenLibrarySearchResource();
             });
+
+            return OpenLibrarySearchMapper.ReRankAndMap(resource, asin, null);
         }
 
         public List<Book> SearchByForeignBookId(string foreignBookId, bool getAllEditions)
@@ -616,18 +892,12 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                 // search box is a typo, not a server fault.
                 try
                 {
-                    var books = Cached(true, $"oe_{foreignBookId}", TimeSpan.FromDays(30), () =>
+                    var editions = Cached(true, $"oe_{foreignBookId}", TimeSpan.FromDays(30), () =>
                     {
-                        var resp = Send<OpenLibraryEditionResource>(_requestBuilder.For($"books/{foreignBookId}.json").Build());
-                        if (resp?.Resource == null)
-                        {
-                            return new List<Book>();
-                        }
-
-                        return new List<Book> { OpenLibraryEditionMapper.ToBook(resp.Resource) };
+                        return AsCacheable(Send<OpenLibraryEditionResource>(_requestBuilder.For($"books/{foreignBookId}.json").Build())?.Resource);
                     });
 
-                    return WithAuthorNames(books);
+                    return WithAuthorNames(editions.Select(e => OpenLibraryEditionMapper.ToBook(e)).ToList());
                 }
                 catch (Exception ex) when (IsNotFound(ex))
                 {
@@ -832,11 +1102,21 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
             }
         }
 
+        // useCache: false means "do not serve me a cached copy", not "leave the
+        // cache alone". The fresh result is written back over the old entry:
+        // skipping the cache without updating it would show a manual refresh
+        // the corrected record and then hand the stale one to the next cached
+        // reader for the rest of the TTL. A fetch that throws leaves the old
+        // entry in place -- stale data beats none.
         private T Cached<T>(bool useCache, string cacheKey, TimeSpan ttl, Func<T> factory)
         {
             if (!useCache)
             {
-                return factory();
+                var fresh = factory();
+
+                _cache.Add(cacheKey, fresh, DateTimeOffset.UtcNow.Add(ttl));
+
+                return fresh;
             }
 
             return _cache.GetOrAdd(cacheKey, () => factory(), DateTimeOffset.UtcNow.Add(ttl));
@@ -844,7 +1124,8 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
 
         // Inline retry loop for OL transient failures. 429 + 5xx → wait
         // (2s, 4s, 8s) + jitter, max 3 retries. Honors the Retry-After
-        // header when OL provides one (common on 429).
+        // header when OL provides one (common on 429), up to MaxRetryAfter;
+        // a longer one ends the retries on the spot.
         //
         // Not using Polly: Polly 8's ResiliencePipeline<HttpResponse> doesn't
         // compose cleanly with the generic HttpResponse<T> here (covariance
@@ -896,12 +1177,29 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                 }
                 catch (HttpException ex) when (ex.Response != null && IsRetryable(ex.Response) && attempt < MaxRetries)
                 {
-                    _logger.Warn(ex, "OL request {0} threw on attempt {1}; retrying after {2}s", request.Url, attempt + 1, delay.TotalSeconds);
-                    Wait(ex.Response, delay);
+                    var wait = RetryWait(ex.Response, delay);
+
+                    if (!wait.HasValue)
+                    {
+                        // The server named a time further off than we will
+                        // block for. Sleeping it out is not an option and
+                        // retrying sooner is how a rate limit becomes a ban, so
+                        // stop here. Rethrowing the 429/5xx as it stands is
+                        // what makes Send() record it as a refusal: a few of
+                        // these in a row open the breaker, which is the right
+                        // mechanism for "go away for an hour" -- and one that
+                        // could never engage while each request was still
+                        // asleep inside this loop.
+                        _logger.Warn("OL request {0} was refused with {1} and Retry-After: {2}, longer than the {3}s this will wait; not retrying", request.Url, ex.Response.StatusCode, RetryAfterHeader(ex.Response), MaxRetryAfter.TotalSeconds);
+                        throw;
+                    }
+
+                    _logger.Warn(ex, "OL request {0} threw on attempt {1}; retrying after {2}s", request.Url, attempt + 1, wait.Value.TotalSeconds);
+                    Delay(wait.Value);
                     delay = NextDelay(delay);
                     continue;
                 }
-                catch (Exception ex) when (IsTransientNetworkError(ex) && attempt < MaxRetries)
+                catch (Exception ex) when (MetadataSourceStatusService.IsTransportFailure(ex) && attempt < MaxRetries)
                 {
                     // HTTP/2 stream resets, mid-response IOException, request
                     // timeouts. The original HttpException catch above only
@@ -910,16 +1208,36 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
                     // HttpRequestException/IOException and previously
                     // aborted entire author refreshes mid-flight. Retry with
                     // the same backoff schedule as the status-coded path.
+                    //
+                    // The predicate is the status service's, not a local copy.
+                    // "Worth retrying" and "counts against the breaker when the
+                    // retries run out" are the same set of failures, and when
+                    // each side kept its own list both forgot the WebException
+                    // the dispatcher wraps a timeout in.
                     _logger.Warn(ex, "OL request {0} hit transient network error on attempt {1}; retrying after {2}s", request.Url, attempt + 1, delay.TotalSeconds);
-                    Thread.Sleep(delay);
+                    Delay(delay);
                     delay = NextDelay(delay);
                     continue;
                 }
 
                 if (response != null && IsRetryable(response) && attempt < MaxRetries)
                 {
-                    _logger.Warn("OL request {0} returned {1} on attempt {2}; retrying after {3}s", request.Url, response.StatusCode, attempt + 1, delay.TotalSeconds);
-                    Wait(response, delay);
+                    // Only reachable for a request that suppresses HTTP errors;
+                    // otherwise HttpClient has already thrown and the catch
+                    // above dealt with it. Same rule either way.
+                    var wait = RetryWait(response, delay);
+
+                    if (!wait.HasValue)
+                    {
+                        _logger.Warn("OL request {0} was refused with {1} and Retry-After: {2}, longer than the {3}s this will wait; not retrying", request.Url, response.StatusCode, RetryAfterHeader(response), MaxRetryAfter.TotalSeconds);
+
+                        // Thrown rather than returned: Send() records a
+                        // returned response as contact, and this was a refusal.
+                        throw new HttpException(request, response);
+                    }
+
+                    _logger.Warn("OL request {0} returned {1} on attempt {2}; retrying after {3}s", request.Url, response.StatusCode, attempt + 1, wait.Value.TotalSeconds);
+                    Delay(wait.Value);
                     delay = NextDelay(delay);
                     continue;
                 }
@@ -940,23 +1258,67 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
             return response.StatusCode == HttpStatusCode.TooManyRequests || response.HasHttpServerError;
         }
 
-        private static bool IsTransientNetworkError(Exception ex)
+        // How long to wait before the next attempt, or null for "do not make
+        // one": the server asked for longer than MaxRetryAfter.
+        //
+        // No Retry-After, or one that cannot be used, falls back to the
+        // exponential schedule.
+        private static TimeSpan? RetryWait(HttpResponse response, TimeSpan fallback)
         {
-            return ex is System.Net.Http.HttpRequestException
-                || ex is System.IO.IOException
-                || ex is System.Threading.Tasks.TaskCanceledException;
-        }
+            var requested = ParseRetryAfter(RetryAfterHeader(response));
 
-        private static void Wait(HttpResponse response, TimeSpan fallback)
-        {
-            var retryAfter = response?.Headers?.GetSingleValue("Retry-After");
-            if (!string.IsNullOrEmpty(retryAfter) && int.TryParse(retryAfter, out var seconds))
+            if (!requested.HasValue)
             {
-                Thread.Sleep(TimeSpan.FromSeconds(seconds));
-                return;
+                return fallback;
             }
 
-            Thread.Sleep(fallback);
+            return requested.Value > MaxRetryAfter ? null : requested;
+        }
+
+        // Not GetSingleValue: that throws if a proxy in the path has managed to
+        // repeat the header, and a malformed hint is no reason to fail a
+        // request that was about to be retried anyway.
+        private static string RetryAfterHeader(HttpResponse response)
+        {
+            return response?.Headers?.GetValues("Retry-After")?.FirstOrDefault();
+        }
+
+        // Retry-After is either a number of seconds or an HTTP date (RFC 9110
+        // §10.2.3). Null for anything else, and for zero, a negative number or
+        // a date already past -- none of which name a wait, and the negative
+        // one used to reach Thread.Sleep and throw.
+        internal static TimeSpan? ParseRetryAfter(string value)
+        {
+            if (value.IsNullOrWhiteSpace())
+            {
+                return null;
+            }
+
+            TimeSpan requested;
+
+            if (long.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds))
+            {
+                // Clamped so that an absurd value is merely "far too long"
+                // rather than an overflow in TimeSpan.FromSeconds.
+                requested = TimeSpan.FromSeconds(Math.Min(seconds, (long)TimeSpan.FromDays(365).TotalSeconds));
+            }
+            else if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var when))
+            {
+                requested = when - DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                return null;
+            }
+
+            return requested > TimeSpan.Zero ? requested : null;
+        }
+
+        // Seam for tests: the back-off schedule is the behaviour under test and
+        // it is not worth fourteen real seconds per case to assert it.
+        protected virtual void Delay(TimeSpan delay)
+        {
+            Thread.Sleep(delay);
         }
 
         private static TimeSpan NextDelay(TimeSpan current)

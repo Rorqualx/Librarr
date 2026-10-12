@@ -22,6 +22,7 @@ namespace NzbDrone.Core.Books
         List<Book> GetBooksByFileIds(IEnumerable<int> fileIds);
         Book AddBook(Book newBook, bool doRefresh = true);
         Book FindById(string foreignId);
+        List<Book> FindByIds(IEnumerable<string> foreignIds);
         Book FindBySlug(string titleSlug);
         Book FindByTitle(int authorMetadataId, string title);
         Book FindByTitleInexact(int authorMetadataId, string title);
@@ -92,6 +93,11 @@ namespace NzbDrone.Core.Books
         public Book FindById(string foreignId)
         {
             return _bookRepository.FindById(foreignId);
+        }
+
+        public List<Book> FindByIds(IEnumerable<string> foreignIds)
+        {
+            return _bookRepository.FindByIds(foreignIds);
         }
 
         public Book FindBySlug(string titleSlug)

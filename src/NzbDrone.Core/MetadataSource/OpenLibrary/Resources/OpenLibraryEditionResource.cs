@@ -28,6 +28,7 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary.Resources
         [JsonProperty("physical_format")]
         public string PhysicalFormat { get; set; }
 
+        [JsonConverter(typeof(OpenLibraryIdListConverter))]
         public List<int> Covers { get; set; }
 
         public List<OpenLibraryKey> Languages { get; set; }

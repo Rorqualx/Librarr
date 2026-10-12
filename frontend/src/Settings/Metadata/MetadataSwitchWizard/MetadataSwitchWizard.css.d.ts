@@ -2,6 +2,7 @@
 // Please do not change this file!
 interface CssExports {
   'body': string;
+  'error': string;
   'running': string;
 }
 export const cssExports: CssExports;

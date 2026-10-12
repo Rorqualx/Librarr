@@ -87,6 +87,32 @@ namespace NzbDrone.Core.Test.MusicTests.BookRepositoryTests
             book.Title.Should().Be(_bookSpecial.Title);
         }
 
+        [Test]
+        public void should_find_books_by_foreign_ids_in_one_call()
+        {
+            var books = _bookRepo.FindByIds(new List<string> { "1", "2", "not-in-the-library" });
+
+            books.Select(b => b.Title).Should().BeEquivalentTo(_book.Title, _bookSpecial.Title);
+        }
+
+        [Test]
+        public void should_find_books_by_foreign_ids_across_more_than_one_chunk()
+        {
+            // 1,200 ids is more than one chunk; the two real ones sit at
+            // either end so each lands in a different statement.
+            var ids = new List<string> { "1" };
+            ids.AddRange(Enumerable.Range(1000, 1200).Select(i => i.ToString()));
+            ids.Add("2");
+
+            _bookRepo.FindByIds(ids).Should().HaveCount(2);
+        }
+
+        [Test]
+        public void should_find_no_books_for_an_empty_id_list()
+        {
+            _bookRepo.FindByIds(new List<string>()).Should().BeEmpty();
+        }
+
         [TestCase("ANTholog")]
         [TestCase("nthology")]
         [TestCase("antholoyg")]

@@ -6,7 +6,10 @@ interface CssExports {
   'confidenceLow': string;
   'confidenceMid': string;
   'empty': string;
+  'loadError': string;
+  'loadErrorMessage': string;
   'olInput': string;
+  'rowError': string;
   'table': string;
 }
 export const cssExports: CssExports;

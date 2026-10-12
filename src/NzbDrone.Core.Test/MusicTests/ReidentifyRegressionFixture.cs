@@ -117,6 +117,68 @@ namespace NzbDrone.Core.Test.MusicTests
             mapping.OpenLibraryWorkId.Should().NotStartWith("/", "mapper must strip the /works/ prefix");
         }
 
+        // Goodreads numbered authors and works separately, so a library can
+        // hold an author and a book with the same id. The author is mapped
+        // first; its row used to make the book look already mapped.
+        [Test]
+        public void Book_sharing_its_goodreads_id_with_an_author_should_still_be_mapped()
+        {
+            var authorRow = new BookIdMapping
+            {
+                GoodreadsId = "GR-BOOK-1",
+                OpenLibraryWorkId = null,
+                OpenLibraryEditionId = "OL79034A",
+                Confidence = 0.90,
+                Source = BookIdMappingSource.TitleAuthor
+            };
+            _writtenMappings.Add(authorRow);
+
+            Subject.Execute(new ReidentifyLibraryCommand());
+
+            var rows = _writtenMappings.Where(m => m.GoodreadsId == "GR-BOOK-1").ToList();
+
+            rows.Should().HaveCount(2);
+            rows.Should().ContainSingle(m => m.IsBookMapping())
+                .Which.Source.Should().Be(BookIdMappingSource.Isbn);
+
+            // The author's row is as it was: still an author's, still its own.
+            rows.Should().ContainSingle(m => m.IsAuthorMapping()).Which.Should().BeSameAs(authorRow);
+            authorRow.OpenLibraryWorkId.Should().BeNull();
+            authorRow.OpenLibraryEditionId.Should().Be("OL79034A");
+
+            Mocker.GetMock<IBookIdMappingRepository>()
+                  .Verify(r => r.Update(It.IsAny<BookIdMapping>()), Times.Never());
+        }
+
+        // A title search whose first hit has a different title is recorded
+        // for review, below the line the factory translates through.
+        [Test]
+        public void Mappings_reidentify_was_unsure_of_should_be_stored_but_not_trusted()
+        {
+            _seedBooks.Add(new Book
+            {
+                Id = 99,
+                ForeignBookId = "GR-BOOK-99",
+                Title = "A Title OpenLibrary Does Not Return First",
+                Author = new Author { Name = "Frank Herbert" }
+            });
+
+            // Whatever is searched for, the Dune results come back.
+            Mocker.GetMock<IHttpClient>()
+                  .Setup(c => c.Get<OpenLibrarySearchResource>(It.IsAny<HttpRequest>()))
+                  .Returns<HttpRequest>(req => BuildResponse<OpenLibrarySearchResource>(req, "search_dune_herbert.json"));
+
+            Subject.Execute(new ReidentifyLibraryCommand());
+
+            var guess = _writtenMappings.Single(m => m.GoodreadsId == "GR-BOOK-99");
+
+            guess.Confidence.Should().BeLessThan(MediumConfidence);
+            guess.IsTrusted().Should().BeFalse();
+
+            _writtenMappings.Where(m => m.Confidence >= MediumConfidence)
+                .Should().OnlyContain(m => m.IsTrusted());
+        }
+
         public static IEnumerable<TestCaseData> IsbnCases()
         {
             foreach (var (isbn, cassette) in IsbnCassettes)
@@ -187,9 +249,15 @@ namespace NzbDrone.Core.Test.MusicTests
                   .Setup(s => s.GetFilesByBook(It.IsAny<int>()))
                   .Returns(new List<BookFile>());
 
+            // By kind, as the repository answers: a book lookup never sees
+            // an author's row and the other way round.
             Mocker.GetMock<IBookIdMappingRepository>()
-                  .Setup(r => r.FindByGoodreadsId(It.IsAny<string>()))
-                  .Returns<string>(gr => _writtenMappings.FirstOrDefault(m => m.GoodreadsId == gr));
+                  .Setup(r => r.FindBookByGoodreadsId(It.IsAny<string>()))
+                  .Returns<string>(gr => _writtenMappings.FirstOrDefault(m => m.GoodreadsId == gr && m.IsBookMapping()));
+
+            Mocker.GetMock<IBookIdMappingRepository>()
+                  .Setup(r => r.FindAuthorByGoodreadsId(It.IsAny<string>()))
+                  .Returns<string>(gr => _writtenMappings.FirstOrDefault(m => m.GoodreadsId == gr && m.IsAuthorMapping()));
 
             Mocker.GetMock<IBookIdMappingRepository>()
                   .Setup(r => r.Insert(It.IsAny<BookIdMapping>()))

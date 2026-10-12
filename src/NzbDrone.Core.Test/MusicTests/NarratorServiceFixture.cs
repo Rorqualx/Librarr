@@ -4,6 +4,7 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Books;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Test.Framework;
 
 namespace NzbDrone.Core.Test.MusicTests
@@ -178,7 +179,7 @@ namespace NzbDrone.Core.Test.MusicTests
             result.Should().NotBeNull();
             result.Should().BeEmpty();
             Mocker.GetMock<IEditionService>()
-                .Verify(s => s.GetEdition(It.IsAny<int>()), Times.Never);
+                .Verify(s => s.FindEditions(It.IsAny<IEnumerable<int>>()), Times.Never);
             Mocker.GetMock<IBookService>()
                 .Verify(s => s.GetBooks(It.IsAny<IEnumerable<int>>()), Times.Never);
         }
@@ -198,11 +199,13 @@ namespace NzbDrone.Core.Test.MusicTests
                 });
 
             Mocker.GetMock<IEditionService>()
-                .Setup(s => s.GetEdition(100))
-                .Returns(new Edition { Id = 100, BookId = 7 });
-            Mocker.GetMock<IEditionService>()
-                .Setup(s => s.GetEdition(101))
-                .Returns(new Edition { Id = 101, BookId = 7 });
+                .Setup(s => s.FindEditions(It.Is<IEnumerable<int>>(ids =>
+                    ids.OrderBy(id => id).SequenceEqual(new[] { 100, 101 }))))
+                .Returns(new List<Edition>
+                {
+                    new Edition { Id = 100, BookId = 7 },
+                    new Edition { Id = 101, BookId = 7 }
+                });
 
             var expected = new List<Book> { new Book { Id = 7 } };
             Mocker.GetMock<IBookService>()
@@ -220,10 +223,11 @@ namespace NzbDrone.Core.Test.MusicTests
         [Test]
         public void GetBooksForNarrator_should_skip_missing_editions()
         {
-            // If GetEdition returns null for an edition id (e.g. the
-            // join row outlived a deleted edition row), the service
-            // should drop it rather than NPE — and pass through the
-            // surviving books only.
+            // Join row 200 outlived its edition. The lookup is a single
+            // set query that simply returns no row for it, so the
+            // surviving book still comes back. GetEdition must not be
+            // used here: it throws ModelNotFoundException for a missing
+            // id rather than returning null.
             Mocker.GetMock<IEditionNarratorRepository>()
                 .Setup(r => r.FindByNarratorId(5))
                 .Returns(new List<EditionNarrator>
@@ -233,11 +237,12 @@ namespace NzbDrone.Core.Test.MusicTests
                 });
 
             Mocker.GetMock<IEditionService>()
-                .Setup(s => s.GetEdition(100))
-                .Returns(new Edition { Id = 100, BookId = 7 });
-            Mocker.GetMock<IEditionService>()
                 .Setup(s => s.GetEdition(200))
-                .Returns((Edition)null);
+                .Throws(new ModelNotFoundException(typeof(Edition), 200));
+            Mocker.GetMock<IEditionService>()
+                .Setup(s => s.FindEditions(It.Is<IEnumerable<int>>(ids =>
+                    ids.OrderBy(id => id).SequenceEqual(new[] { 100, 200 }))))
+                .Returns(new List<Edition> { new Edition { Id = 100, BookId = 7 } });
 
             Mocker.GetMock<IBookService>()
                 .Setup(s => s.GetBooks(It.Is<IEnumerable<int>>(ids =>
@@ -248,6 +253,29 @@ namespace NzbDrone.Core.Test.MusicTests
 
             result.Should().HaveCount(1);
             result[0].Id.Should().Be(7);
+            Mocker.GetMock<IEditionService>()
+                .Verify(s => s.GetEdition(It.IsAny<int>()), Times.Never);
+        }
+
+        [Test]
+        public void GetBooksForNarrator_should_return_empty_when_every_edition_is_missing()
+        {
+            Mocker.GetMock<IEditionNarratorRepository>()
+                .Setup(r => r.FindByNarratorId(5))
+                .Returns(new List<EditionNarrator>
+                {
+                    new EditionNarrator { EditionId = 200, NarratorId = 5 }
+                });
+
+            Mocker.GetMock<IEditionService>()
+                .Setup(s => s.FindEditions(It.IsAny<IEnumerable<int>>()))
+                .Returns(new List<Edition>());
+
+            var result = Subject.GetBooksForNarrator(5);
+
+            result.Should().BeEmpty();
+            Mocker.GetMock<IBookService>()
+                .Verify(s => s.GetBooks(It.IsAny<IEnumerable<int>>()), Times.Never);
         }
     }
 }

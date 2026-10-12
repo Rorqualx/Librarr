@@ -99,8 +99,14 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary.Mappers
                     // fetches /works/{key}.json (which usually has a
                     // `first_publish_date` even when the author/works
                     // index doesn't).
+                    //
+                    // The placeholder is a named value, not a date: it means
+                    // "not known yet", and anything that reasons about when a
+                    // book came out has to ask PlaceholderReleaseDate.IsKnown
+                    // rather than read it as 1900. See that type for why it
+                    // is not simply null.
                     var releaseDate = OpenLibraryDateParser.Parse(w.FirstPublishDate)
-                        ?? new System.DateTime(1900, 1, 1, 0, 0, 0, System.DateTimeKind.Utc);
+                        ?? PlaceholderReleaseDate.Value;
 
                     return new Book
                     {
@@ -140,7 +146,15 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary.Mappers
             {
                 ForeignAuthorId = olKey,
                 TitleSlug = olKey,
-                Name = (resource.PersonalName ?? resource.Name).CleanSpaces(),
+
+                // Empty rather than null when the document carries no name at
+                // all, which is what a /type/redirect or /type/delete record
+                // looks like. OpenLibraryProxy resolves those before mapping,
+                // so this is the backstop: CleanSpaces() on null is an
+                // ArgumentNullException, and one unnamed document should not
+                // abort an author refresh. Empty matches the stub
+                // OpenLibraryWorkMapper builds for an author it cannot name yet.
+                Name = (resource.PersonalName ?? resource.Name)?.CleanSpaces() ?? string.Empty,
                 Overview = resource.Bio,
                 Born = OpenLibraryDateParser.Parse(resource.BirthDate),
                 Died = OpenLibraryDateParser.Parse(resource.DeathDate),

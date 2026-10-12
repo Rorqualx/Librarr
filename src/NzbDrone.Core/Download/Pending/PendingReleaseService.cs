@@ -235,12 +235,14 @@ namespace NzbDrone.Core.Download.Pending
                 }
             }
 
-            //Return best quality release for each book
-            var deduped = queued.GroupBy(q => q.Book.Id).Select(g =>
+            // Return best quality release for each book, per format: a pending
+            // ebook and a pending audiobook are not alternatives for one slot,
+            // and each is ranked by its own profile.
+            var deduped = queued.GroupBy(q => new { BookId = q.Book.Id, Format = q.Quality.Format() }).Select(g =>
             {
                 var author = g.First().Author;
 
-                return g.OrderByDescending(e => e.Quality, new QualityModelComparer(author.QualityProfile))
+                return g.OrderByDescending(e => e.Quality, new QualityModelComparer(author.QualityProfileFor(g.Key.Format)))
                         .ThenBy(q => PrioritizeDownloadProtocol(q.Author, q.Protocol))
                         .First();
             });

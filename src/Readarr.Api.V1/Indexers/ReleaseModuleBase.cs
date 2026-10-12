@@ -41,9 +41,11 @@ namespace Readarr.Api.V1.Indexers
 
             if (decision.RemoteBook.Author != null)
             {
+                // Weighed by the profile for the release's format, so audio
+                // releases sort by the audiobook profile's order.
                 release.QualityWeight = decision.RemoteBook
                                                 .Author
-                                                .QualityProfile.Value.GetIndex(release.Quality.Quality).Index * 100;
+                                                .QualityProfileFor(release.Quality).GetIndex(release.Quality.Quality).Index * 100;
             }
 
             release.QualityWeight += release.Quality.Revision.Real * 10;

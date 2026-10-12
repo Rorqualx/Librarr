@@ -9,6 +9,10 @@ namespace NzbDrone.Core.MetadataSource.OpenLibrary
 
     public class OpenLibraryRequestBuilder : IOpenLibraryRequestBuilder
     {
+        // A tiny stable resource (OL author "Mark Twain") for checks that only
+        // need some response back: connectivity, the proxy, the system clock.
+        public const string ProbePath = "authors/OL18319A.json";
+
         private const string BaseUrl = "https://openlibrary.org/";
 
         public HttpRequestBuilder For(string path)

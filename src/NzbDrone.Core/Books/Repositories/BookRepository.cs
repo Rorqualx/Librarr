@@ -19,6 +19,7 @@ namespace NzbDrone.Core.Books
         List<Book> GetBooksByFileIds(IEnumerable<int> fileIds);
         Book FindByTitle(int authorMetadataId, string title);
         Book FindById(string foreignBookId);
+        List<Book> FindByIds(IEnumerable<string> foreignBookIds);
         Book FindBySlug(string titleSlug);
         PagingSpec<Book> BooksWithoutFiles(PagingSpec<Book> pagingSpec);
         PagingSpec<Book> BooksWhereCutoffUnmet(PagingSpec<Book> pagingSpec, List<QualitiesBelowCutoff> qualitiesBelowCutoff);
@@ -31,6 +32,8 @@ namespace NzbDrone.Core.Books
 
     public class BookRepository : BasicRepository<Book>, IBookRepository
     {
+        private const int ForeignIdChunkSize = 500;
+
         public BookRepository(IMainDatabase database, IEventAggregator eventAggregator)
             : base(database, eventAggregator)
         {
@@ -98,6 +101,18 @@ namespace NzbDrone.Core.Books
         public Book FindById(string foreignBookId)
         {
             return Query(s => s.ForeignBookId == foreignBookId).SingleOrDefault();
+        }
+
+        public List<Book> FindByIds(IEnumerable<string> foreignBookIds)
+        {
+            // Strings are bound as parameters (only int lists are inlined
+            // by the where-builder), so chunk to stay under the per-statement
+            // parameter limit whatever the size of the caller's list.
+            return foreignBookIds.Distinct()
+                .Chunk(ForeignIdChunkSize)
+                .Select(chunk => chunk.ToList())
+                .SelectMany(chunk => Query(s => chunk.Contains(s.ForeignBookId)))
+                .ToList();
         }
 
         public Book FindBySlug(string titleSlug)

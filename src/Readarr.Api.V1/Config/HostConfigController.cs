@@ -19,6 +19,11 @@ namespace Readarr.Api.V1.Config
     [V1ApiController("config/host")]
     public class HostConfigController : RestController<HostConfigResource>
     {
+        // The stored password hash never leaves the server. When a password is
+        // set the API reports this instead, and a save that sends it straight
+        // back (with no confirmation) means "the password was not edited".
+        public const string PASSWORD_PLACEHOLDER = "********";
+
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IConfigService _configService;
         private readonly IUserService _userService;
@@ -45,6 +50,11 @@ namespace Readarr.Api.V1.Config
                                                                           c.AuthenticationMethod == AuthenticationType.Forms);
             SharedValidator.RuleFor(c => c.Password).NotEmpty().When(c => c.AuthenticationMethod == AuthenticationType.Basic ||
                                                                           c.AuthenticationMethod == AuthenticationType.Forms);
+
+            SharedValidator.RuleFor(c => c.Password)
+                .Must((resource, p) => !IsPasswordUnchanged(resource) || _userService.FindUser() != null).WithMessage("'Password' must not be empty.")
+                .When(c => c.AuthenticationMethod == AuthenticationType.Basic ||
+                           c.AuthenticationMethod == AuthenticationType.Forms);
 
             SharedValidator.RuleFor(c => c.PasswordConfirmation)
                 .Must((resource, p) => IsMatchingPassword(resource)).WithMessage("Must match Password");
@@ -90,9 +100,7 @@ namespace Readarr.Api.V1.Config
 
         private bool IsMatchingPassword(HostConfigResource resource)
         {
-            var user = _userService.FindUser();
-
-            if (user != null && user.Password == resource.Password)
+            if (IsPasswordUnchanged(resource) && _userService.FindUser() != null)
             {
                 return true;
             }
@@ -103,6 +111,14 @@ namespace Readarr.Api.V1.Config
             }
 
             return false;
+        }
+
+        // The placeholder only stands for "unchanged" when the confirmation is
+        // empty, which is what GET returns. Typed into both fields it is an
+        // ordinary new password, so no password is impossible to set.
+        private static bool IsPasswordUnchanged(HostConfigResource resource)
+        {
+            return resource.Password == PASSWORD_PLACEHOLDER && resource.PasswordConfirmation.IsNullOrWhiteSpace();
         }
 
         protected override HostConfigResource GetResourceById(int id)
@@ -119,7 +135,7 @@ namespace Readarr.Api.V1.Config
             var user = _userService.FindUser();
 
             resource.Username = user?.Username ?? string.Empty;
-            resource.Password = user?.Password ?? string.Empty;
+            resource.Password = user?.Password.IsNotNullOrWhiteSpace() == true ? PASSWORD_PLACEHOLDER : string.Empty;
             resource.PasswordConfirmation = string.Empty;
 
             return resource;
@@ -137,7 +153,7 @@ namespace Readarr.Api.V1.Config
 
             if (resource.Username.IsNotNullOrWhiteSpace() && resource.Password.IsNotNullOrWhiteSpace())
             {
-                _userService.Upsert(resource.Username, resource.Password);
+                _userService.Upsert(resource.Username, IsPasswordUnchanged(resource) ? null : resource.Password);
             }
 
             return Accepted(resource.Id);

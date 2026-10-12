@@ -15,6 +15,8 @@ namespace Readarr.Http.Frontend.Mappers
             _backupService = backupService;
         }
 
+        protected override string RootFolder => _backupService.GetBackupFolder();
+
         public override string Map(string resourceUrl)
         {
             var path = resourceUrl.Replace("/backup/", "").Replace('/', Path.DirectorySeparatorChar);

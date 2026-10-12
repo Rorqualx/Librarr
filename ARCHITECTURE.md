@@ -158,9 +158,11 @@ that upstream Readarr dropped when it forked from Lidarr — leaving
   `RootFolderResource.UnmappedFolders`, and `Ignore`d in
   `TableMapping.cs` since it is recomputed per read, never persisted.
 - `src/Readarr.Api.V1/Author/AuthorImportController.cs` — `POST
-  /api/v1/author/import`, bulk-adds via the pre-existing
-  `IAddAuthorService.AddAuthors`. Returns only the authors actually
-  created, since `AddAuthors` skips ones it cannot resolve.
+  /api/v1/author/import`, bulk-adds via `IAddAuthorService.ImportAuthors`
+  (the outcome-reporting form of the pre-existing `AddAuthors`). Returns
+  `{ imported, skipped }`: a row that repeats an earlier row's author, is
+  already in the library, or cannot be resolved is skipped with a reason
+  rather than failing the batch.
 - `frontend/src/LibraryImport/` — the two-step UI, at `/add/import`.
   See that folder's `README.md` for why lookups are queued rather than
   parallel (Open Library meters the search endpoint) and why no row is

@@ -50,6 +50,12 @@ namespace NzbDrone.Core.Books
         {
             public TEntity Entity { get; set; }
             public List<AuthorMetadata> Metadata { get; set; }
+
+            // "There is nothing to refresh this from, and that is not a
+            // reason to remove it." Without it an empty Entity can only
+            // mean the source no longer has the item, which is what gets
+            // it deleted. Whoever sets this has logged why.
+            public bool LeaveAsIs { get; set; }
         }
 
         protected virtual void LogProgress(TEntity local)
@@ -123,6 +129,11 @@ namespace NzbDrone.Core.Books
 
             if (remote == null)
             {
+                if (data.LeaveAsIs)
+                {
+                    return false;
+                }
+
                 if (ShouldDelete(local))
                 {
                     _logger.Warn($"{typeof(TEntity).Name} {local} not found in metadata and is being deleted");

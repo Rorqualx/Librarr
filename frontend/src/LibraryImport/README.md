@@ -48,6 +48,9 @@ more reliable search.
 
 - `RootFolderService.GetUnmappedFolders` fills `RootFolderResource.unmappedFolders`.
 - `POST /api/v1/author/import` (`AuthorImportController`) bulk-adds. It returns
-  only the authors that were actually created — `AddAuthorService.AddAuthors`
-  skips ones it can't resolve — so the page removes the rows that succeeded and
-  leaves the rest visible with a warning.
+  `{ imported, skipped }`: the authors that were created, and one entry per row
+  that was not, keyed by the folder `path` it was sent with and carrying a
+  `reason` (`duplicate` — an earlier row picked the same author; `exists` —
+  already in the library; `failed` — lookup or validation, see `message`).
+  `AddAuthorService.ImportAuthors` never lets one row fail the batch, so the
+  page removes the rows that succeeded and labels each one that stayed.

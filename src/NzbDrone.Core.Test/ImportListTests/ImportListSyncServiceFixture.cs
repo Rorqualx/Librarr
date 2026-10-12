@@ -1,7 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using FizzWare.NBuilder;
+using FluentAssertions;
 using Moq;
+using NLog;
+using NLog.Config;
+using NLog.Targets;
 using NUnit.Framework;
 using NzbDrone.Core.Books;
 using NzbDrone.Core.ImportLists;
@@ -16,6 +20,8 @@ namespace NzbDrone.Core.Test.ImportListTests
     public class ImportListSyncServiceFixture : CoreTest<ImportListSyncService>
     {
         private List<ImportListItemInfo> _importListReports;
+        private MemoryTarget _logTarget;
+        private LoggingRule _logRule;
 
         [SetUp]
         public void SetUp()
@@ -74,6 +80,43 @@ namespace NzbDrone.Core.Test.ImportListTests
             Mocker.GetMock<IAddAuthorService>()
                 .Setup(v => v.AddAuthors(It.IsAny<List<Author>>(), false))
                 .Returns<List<Author>, bool>((x, y) => x);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (_logTarget != null)
+            {
+                LogManager.Configuration.LoggingRules.Remove(_logRule);
+                LogManager.Configuration.RemoveTarget(_logTarget.Name);
+                LogManager.ReconfigExistingLoggers();
+                _logTarget = null;
+            }
+        }
+
+        private void WithCapturedLog()
+        {
+            _logTarget = new MemoryTarget { Name = "ImportListSyncServiceFixture", Layout = "${message}" };
+            _logRule = new LoggingRule("*", LogLevel.Info, _logTarget);
+
+            LogManager.Configuration.AddTarget(_logTarget.Name, _logTarget);
+            LogManager.Configuration.LoggingRules.Add(_logRule);
+            LogManager.ReconfigExistingLoggers();
+        }
+
+        // What the three OpenLibrary lists emit: work and author keys, and
+        // no edition id, because OpenLibrary has no Goodreads edition ids.
+        private void WithOpenLibraryItem()
+        {
+            _importListReports.Clear();
+            _importListReports.Add(new ImportListItemInfo
+            {
+                Author = "Ursula K. Le Guin",
+                AuthorGoodreadsId = "OL31353A",
+                Book = "The Dispossessed",
+                BookGoodreadsId = "OL26561399W",
+                EditionGoodreadsId = null
+            });
         }
 
         private void WithBook()
@@ -327,6 +370,85 @@ namespace NzbDrone.Core.Test.ImportListTests
                 .Verify(v => v.AddAuthors(It.Is<List<Author>>(t => t.Count == 1 &&
                                                                    t.First().AddOptions.BooksToMonitor.Count == expectedBooksMonitored &&
                                                                    t.First().Monitored == expectedAuthorMonitored), false));
+        }
+
+        [Test]
+        public void should_add_book_that_has_no_edition_id()
+        {
+            WithOpenLibraryItem();
+
+            Subject.Execute(new ImportListSyncCommand());
+
+            Mocker.GetMock<IAddBookService>()
+                .Verify(v => v.AddBooks(It.Is<List<Book>>(t => t.Count == 1 &&
+                                                               t.First().ForeignBookId == "OL26561399W" &&
+                                                               t.First().Monitored &&
+                                                               t.First().Editions.Value.Count == 0), false));
+            Mocker.GetMock<IAddAuthorService>()
+                .Verify(v => v.AddAuthors(It.Is<List<Author>>(t => t.Count == 1 &&
+                                                                   t.First().AddOptions.BooksToMonitor.Single() == "OL26561399W"), false));
+        }
+
+        [Test]
+        public void should_not_map_through_goodreads_if_book_and_author_id_but_no_edition_id()
+        {
+            WithOpenLibraryItem();
+
+            Subject.Execute(new ImportListSyncCommand());
+
+            Mocker.GetMock<IGoodreadsSearchProxy>()
+                .Verify(v => v.Search(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IGoodreadsProxy>()
+                .Verify(v => v.GetBookInfo(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        // An author keeps its AddOptions until its first scan has run, so a
+        // sync that arrives before then finds an existing author that still
+        // carries them. They belong to that earlier add, not to this sync.
+        [Test]
+        public void should_not_change_add_options_of_existing_author_that_has_not_been_scanned_yet()
+        {
+            WithOpenLibraryItem();
+
+            var existingAuthor = new Author
+            {
+                Id = 1,
+                ForeignAuthorId = "OL31353A",
+                Monitored = true,
+                AddOptions = new AddAuthorOptions { BooksToMonitor = new List<string> { "OL1W" } }
+            };
+
+            Mocker.GetMock<IAuthorService>()
+                .Setup(v => v.FindById("OL31353A"))
+                .Returns(existingAuthor);
+
+            Subject.Execute(new ImportListSyncCommand());
+
+            existingAuthor.AddOptions.BooksToMonitor.Should().Equal("OL1W");
+
+            Mocker.GetMock<IAddAuthorService>()
+                .Verify(v => v.AddAuthors(It.Is<List<Author>>(t => t.Count == 0), false));
+            Mocker.GetMock<IAddBookService>()
+                .Verify(v => v.AddBooks(It.Is<List<Book>>(t => t.Count == 1 && t.First().Author.Value == existingAuthor), false));
+        }
+
+        [Test]
+        public void should_report_books_and_authors_that_were_added_not_the_ones_attempted()
+        {
+            WithOpenLibraryItem();
+            WithCapturedLog();
+
+            Mocker.GetMock<IAddBookService>()
+                .Setup(v => v.AddBooks(It.IsAny<List<Book>>(), false))
+                .Returns(new List<Book>());
+
+            Mocker.GetMock<IAddAuthorService>()
+                .Setup(v => v.AddAuthors(It.IsAny<List<Author>>(), false))
+                .Returns(new List<Author>());
+
+            Subject.Execute(new ImportListSyncCommand());
+
+            _logTarget.Logs.Should().Contain("Import List Sync Completed. Items found: 1, Authors added: 0, Books added: 0");
         }
 
         [Test]
