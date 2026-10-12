@@ -821,39 +821,94 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install dotnet-sbom-tool
+      # Both generators used to end in `|| echo "...continuing"`, and the
+      # upload in `if-no-files-found: warn`. Neither generator had ever
+      # worked: `dotnet sbom-tool` is not how a global tool is invoked (the
+      # command is `sbom-tool`), and syft rejected every --exclude pattern
+      # for not starting with "./". The job uploaded two zero-byte files
+      # and reported success on every build, as a required status check.
+      # Nothing below swallows an exit code, and the result is inspected
+      # before it is uploaded.
+      #
+      # Pinned by hand: Dependabot does not track `dotnet tool install`.
+      - name: Install sbom-tool
         shell: bash
-        run: dotnet tool install --global Microsoft.Sbom.DotNetTool
+        run: dotnet tool install --global Microsoft.Sbom.DotNetTool --version 4.1.13
+
+      - name: Restore the solution
+        # sbom-tool finds NuGet packages by reading project.assets.json,
+        # which only exists after a restore. Without this it exits 0 with
+        # "no packages detected" and writes an SBOM listing none.
+        shell: bash
+        run: dotnet restore src/Readarr.sln
 
       - name: Generate .NET SBOM
         shell: bash
+        env:
+          # The tool targets net8.0. The runner image carries that runtime
+          # today; this keeps the step working on .NET 10 alone if it stops.
+          DOTNET_ROLL_FORWARD: Major
         run: |
-          mkdir -p _sbom
-          dotnet sbom-tool generate \
+          set -euo pipefail
+          mkdir -p _sbom/dotnet
+          # -bc points at the restore output, not at src: obj/ is redirected
+          # to _temp/obj (Directory.Build.props), so that is where the
+          # assets files are.
+          "$HOME/.dotnet/tools/sbom-tool" generate \
             -b src \
-            -bc src \
+            -bc _temp/obj \
             -m _sbom/dotnet \
             -pn Librarr \
             -pv "${MAJOR_VERSION}.${GITHUB_RUN_NUMBER}" \
             -ps "Librarr Project" \
-            -nsb https://github.com/Rorqualx/Librarr || echo "sbom-tool returned non-zero; continuing"
+            -nsb https://github.com/Rorqualx/Librarr
 
-      - name: Install Node SBOM tool (syft)
-        shell: bash
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+      - name: Install syft
+        # Was `curl .../anchore/syft/main/install.sh | sh`: a script from a
+        # branch, installing whatever release was newest that minute. The
+        # action is pinned to a commit and installs the syft version that
+        # commit names, so Dependabot moves both together.
+        id: syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: Generate Node SBOM
         shell: bash
+        env:
+          SYFT: ${{ steps.syft.outputs.cmd }}
         run: |
+          set -euo pipefail
           mkdir -p _sbom/node
-          syft dir:. \
+          "$SYFT" scan dir:. \
+            --source-name Librarr \
+            --source-version "${MAJOR_VERSION}.${GITHUB_RUN_NUMBER}" \
             --output spdx-json=_sbom/node/sbom-node.spdx.json \
             --output cyclonedx-json=_sbom/node/sbom-node.cdx.json \
-            --exclude '_output/**' \
-            --exclude '_tests/**' \
-            --exclude 'src/**' \
-            --exclude '.git/**' || echo "syft returned non-zero; continuing"
+            --exclude './_output/**' \
+            --exclude './_tests/**' \
+            --exclude './_temp/**' \
+            --exclude './_sbom/**' \
+            --exclude './src/**' \
+            --exclude './.git/**'
+
+      - name: Verify the SBOMs describe something
+        # A file existing is not the bar. sbom-tool writes a well-formed
+        # manifest with zero packages when it finds no assets files, and
+        # exits 0 doing it. The floors are far below today's counts (176
+        # NuGet, 248 npm) so they only trip when a generator has gone blind.
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet_sbom=_sbom/dotnet/_manifest/spdx_2.2/manifest.spdx.json
+          node_sbom=_sbom/node/sbom-node.spdx.json
+          for f in "$dotnet_sbom" "$node_sbom" _sbom/node/sbom-node.cdx.json; do
+            [ -s "$f" ] || { echo "::error::$f is missing or empty"; exit 1; }
+          done
+          nuget=$(jq '[.packages[] | select(any(.externalRefs[]?; .referenceLocator | startswith("pkg:nuget/")))] | length' "$dotnet_sbom")
+          npm=$(jq '[.packages[] | select(any(.externalRefs[]?; .referenceLocator | startswith("pkg:npm/")))] | length' "$node_sbom")
+          echo "NuGet packages: ${nuget}"
+          echo "npm packages:   ${npm}"
+          [ "$nuget" -ge 50 ] || { echo "::error::.NET SBOM lists ${nuget} NuGet packages, expected at least 50"; exit 1; }
+          [ "$npm" -ge 50 ] || { echo "::error::Node SBOM lists ${npm} npm packages, expected at least 50"; exit 1; }
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v7
@@ -861,4 +916,4 @@ jobs:
           name: sbom
           path: _sbom/
           retention-days: 90
-          if-no-files-found: warn
+          if-no-files-found: error

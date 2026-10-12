@@ -17,6 +17,44 @@ ProgressEnd()
     echo "Finish '$1'"
 }
 
+ResolveBuildBranch()
+{
+    # What gets recorded as AssemblyConfiguration, which the app reads back
+    # as BuildInfo.Branch: the suffix of BuildInfo.Release ("1.2.3-main"),
+    # the "release" field of /initialize.json, and the Sentry environment.
+    #
+    # This used to read ${BUILD_SOURCEBRANCHNAME} and nothing else. That is
+    # an Azure Pipelines variable; GitHub Actions never sets it, so every
+    # tarball, zip and installer built there reported release "1.2.3-" with
+    # an empty branch, while the Docker image -- which passes its branch
+    # explicitly as BUILD_BRANCH -- did not.
+    #
+    # Order: an explicit BUILD_BRANCH (the same name the Dockerfile's ARG
+    # uses, so one value can feed both artifact families), then the Azure
+    # variable for anyone still on it, then what GitHub Actions provides.
+    #
+    # A tag is not a branch. Reporting the tag name would repeat the version
+    # ("1.2.3-v1.2.3-beta") and mint a new Sentry environment per release,
+    # so a tag build reports the branch releases are cut from.
+    local branch="${BUILD_BRANCH:-${BUILD_SOURCEBRANCHNAME:-}}"
+
+    if [ -z "$branch" ]; then
+        if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            branch="main"
+        else
+            # GITHUB_REF_NAME is "<number>/merge" on a pull request;
+            # GITHUB_HEAD_REF is the branch the PR came from, and is only
+            # set there.
+            branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
+        fi
+    fi
+
+    # The value lands in a sed replacement and in an XML element, and branch
+    # names routinely contain "/" ("librarr/foo", "fix/bar"), which would
+    # end the sed expression early and fail the build under `set -e`.
+    printf '%s' "$branch" | tr -c 'A-Za-z0-9._-' '-'
+}
+
 UpdateVersionNumber()
 {
     if [ "$READARRVERSION" != "" ]; then
@@ -28,7 +66,19 @@ UpdateVersionNumber()
         # and surfaces in /api/v1/system/status via InformationalVersion.
         ASSEMBLY_VERSION=$(echo "$READARRVERSION" | sed 's/-[A-Za-z][A-Za-z0-9]*//')
         sed -i'' -e "s/<AssemblyVersion>[0-9.*]\+<\/AssemblyVersion>/<AssemblyVersion>$ASSEMBLY_VERSION<\/AssemblyVersion>/g" src/Directory.Build.props
-        sed -i'' -e "s/<AssemblyConfiguration>[\$()A-Za-z-]\+<\/AssemblyConfiguration>/<AssemblyConfiguration>${BUILD_SOURCEBRANCHNAME}<\/AssemblyConfiguration>/g" src/Directory.Build.props
+        # With no branch to report (a local build outside CI), leave the
+        # "$(Configuration)-dev" placeholder alone rather than blank it.
+        #
+        # The match is "anything up to the closing tag" rather than the old
+        # letters-only class, so a second pass in the same checkout -- the
+        # release workflow builds win-x64 and win-x86 in turn -- restamps
+        # instead of silently not matching a value that contains digits.
+        local buildBranch
+        buildBranch=$(ResolveBuildBranch)
+        if [ -n "$buildBranch" ]; then
+            echo "Branch: $buildBranch"
+            sed -i'' -e "s/<AssemblyConfiguration>[^<]*<\/AssemblyConfiguration>/<AssemblyConfiguration>${buildBranch}<\/AssemblyConfiguration>/g" src/Directory.Build.props
+        fi
         sed -i'' -e "s/<string>10.0.0.0<\/string>/<string>$READARRVERSION<\/string>/g" distribution/osx/Readarr.app/Contents/Info.plist
     fi
 }

@@ -15,16 +15,23 @@
 #     built from distribution/docker/Dockerfile, pushed to:
 #       - ghcr.io/<owner>/librarr            (workflow GITHUB_TOKEN)
 #       - docker.io/<DOCKERHUB_USERNAME>/librarr  (DOCKERHUB_TOKEN secret)
-#     Image tags via docker/metadata-action: :<version>, :beta on beta
-#     tags, :latest only on non-prerelease tags.
+#     Image tags via docker/metadata-action, derived from the computed
+#     version rather than the ref so a manual run tags like a tag push:
+#     :<version>, :v<version>, :beta on beta versions, and :<major>.<minor>
+#     plus :latest only on a plain x.y.z.
 #
 # Explicitly out of scope (TODO with required secrets noted inline):
 #   * macOS .app notarization via notarytool
 #   * Sentry source-map upload (azure-pipelines.yml:377-393)
 #
-# Stay-local: this file lives dormant until `git push --tags` happens.
-# `gh release create --draft` and `docker build-push-action push:false`
-# keep side-effects bounded even on accidental fires.
+# Side effects, so nobody is surprised by them: the GitHub release is
+# created as a DRAFT and needs a human to publish it, but the Docker images
+# are PUBLIC THE MOMENT THE JOB FINISHES -- build-push-action runs with
+# `push: true`. (This comment used to say `push:false`, which stopped
+# being true when the push was switched on.) What bounds that: the push
+# only runs after the packaging job has succeeded, and only after the same
+# job has built the image for the runner's own platform, started it, and
+# seen it answer /ping and report the version being released.
 
 name: Release
 
@@ -43,28 +50,82 @@ env:
   # See the note in build.yml — Node 20 is EOL, 24 is LTS until 2028-04-30.
   NODE_VERSION: '24.x'
 
+# Read-only by default. The two jobs that publish something ask for what
+# they need themselves: `package` (contents: write, for the draft release)
+# and `docker-multiarch` (packages: write, for GHCR). The build jobs run
+# build.sh and third-party tooling and have no business holding either.
 permissions:
-  contents: write    # gh release create
-  packages: write    # future ghcr.io push
+  contents: read
 
 jobs:
   variables:
     name: Compute release version
     runs-on: ubuntu-22.04
+    permissions: {}
     outputs:
       version: ${{ steps.compute.outputs.version }}
+      channel: ${{ steps.compute.outputs.channel }}
+      branch: ${{ steps.compute.outputs.branch }}
     steps:
       - id: compute
         shell: bash
+        env:
+          # Through the environment, never interpolated into the script.
+          # `${{ github.event.inputs.version }}` used to be pasted straight
+          # into the `run:` text, so whatever was typed into the dispatch
+          # form was executed as shell before anything looked at it.
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION="${INPUT_VERSION}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             # Strip the leading "v" from refs/tags/vX.Y.Z
             VERSION="${GITHUB_REF_NAME#v}"
+          else
+            echo "::error::Release runs on a tag push or a manual dispatch, not on ${GITHUB_EVENT_NAME} of ${GITHUB_REF}."
+            exit 1
           fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Release version: ${VERSION}"
+
+          # x.y.z, optionally -alpha / -beta / -rc with an optional counter:
+          # 1.2.3, 1.2.3-beta, 1.0.0-beta.4, 2.0.0-rc1. Every later job
+          # trusts this value -- it becomes file names, a git tag, image
+          # tags and an assembly version -- so it is checked once, here,
+          # for both triggers. The pattern lives in a variable because
+          # bash only treats the right-hand side of =~ as a regex when it
+          # is unquoted, and an unquoted literal with parentheses is a
+          # quoting accident waiting to happen.
+          pattern='^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)[0-9]*(\.[0-9]+)?)?$'
+          if [[ ! "${VERSION}" =~ $pattern ]]; then
+            echo "::error::Not a releasable version (expected e.g. 1.2.3 or 1.2.3-beta, without a leading v). Refusing to continue."
+            exit 1
+          fi
+
+          # The pre-release word, or "stable". Drives the :latest and :beta
+          # image tags. This used to be worked out from github.ref_name,
+          # which on a manual run is the branch: no version tag came out at
+          # all, and a beta dispatched from main was tagged :latest.
+          CHANNEL="${BASH_REMATCH[2]:-stable}"
+
+          # Recorded in the binaries as BuildInfo.Branch. A tag is not a
+          # branch, so a tag build reports the branch releases are cut
+          # from; a manual run reports the branch it was dispatched on.
+          # Computed once here and handed to build.sh and to the Docker
+          # build alike, so the tarballs, installers and images agree.
+          # Keep in step with ResolveBuildBranch in build.sh.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            BRANCH="main"
+          else
+            BRANCH=$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9._-' '-')
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "channel=${CHANNEL}"
+            echo "branch=${BRANCH}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release version: ${VERSION} (channel: ${CHANNEL}, branch: ${BRANCH})"
 
   build-backend:
     name: Build backend (all RIDs)
@@ -72,6 +133,8 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       READARRVERSION: ${{ needs.variables.outputs.version }}
+      # build.sh records this as AssemblyConfiguration. See ResolveBuildBranch.
+      BUILD_BRANCH: ${{ needs.variables.outputs.branch }}
       EnableAnalyzers: 'true'
     steps:
       - uses: actions/checkout@v7
@@ -107,6 +170,8 @@ jobs:
     runs-on: windows-2022
     env:
       READARRVERSION: ${{ needs.variables.outputs.version }}
+      # build.sh records this as AssemblyConfiguration. See ResolveBuildBranch.
+      BUILD_BRANCH: ${{ needs.variables.outputs.branch }}
       EnableAnalyzers: 'true'
     steps:
       - uses: actions/checkout@v7
@@ -276,7 +341,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${{ needs.variables.outputs.version }}"
+          VERSION="${READARRVERSION}"
           for rid in win-x64 win-x86; do
             exe="distribution/windows/setup/output/Librarr.${VERSION}.${rid}-installer.exe"
             [ -f "$exe" ] || { echo "ERROR: $exe missing"; exit 1; }
@@ -307,6 +372,10 @@ jobs:
     name: Tarball + draft release
     needs: [variables, build-backend, build-windows, build-frontend, installer]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write    # gh release create, and deleting a stale draft
+    env:
+      VERSION: ${{ needs.variables.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -407,7 +476,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${{ needs.variables.outputs.version }}"
           mkdir -p _release
 
           # tar.gz targets — POSIX RIDs.
@@ -469,8 +537,6 @@ jobs:
           WINDOWS_SIGNED: ${{ secrets.WINDOWS_CERT_PFX != '' }}
         shell: bash
         run: |
-          VERSION="${{ needs.variables.outputs.version }}"
-
           # `gh release create` always creates a NEW release, and a draft
           # carries no git tag, so there is nothing for GitHub to collide
           # with -- re-running this workflow for a tag silently orphans the
@@ -547,23 +613,139 @@ jobs:
 
   docker-multiarch:
     name: Docker multi-arch
-    needs: [variables, build-backend, build-frontend]
+    # `package`, not just the build jobs. This job used to need only
+    # build-backend and build-frontend -- neither of whose output it uses --
+    # so it pushed public images even when packaging or the draft release
+    # had failed, leaving registries holding a version that had no release.
+    needs: [variables, package]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write    # push to ghcr.io
+    env:
+      VERSION: ${{ needs.variables.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       - name: Set up Docker buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Build once for the runner's own platform and load it into the local
+      # daemon, so there is something to start. Nothing has been pushed and
+      # nobody has logged in to a registry yet: the logins sit below the
+      # smoke test on purpose, so a broken image fails this job before the
+      # credentials are even in play.
+      #
+      # No `platforms:` -- buildx then builds for the builder's native
+      # platform, which is the only one `load` can hand to the daemon and
+      # the only one that runs here without emulation. Same Dockerfile and
+      # build-args as the push below, in the same builder, so the multi-arch
+      # build reuses these layers rather than building amd64 a second time:
+      # the amd64 image that gets pushed is the one that was started here.
+      - name: Build image for the runner's platform
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: distribution/docker/Dockerfile
+          load: true
+          push: false
+          provenance: false
+          tags: librarr:smoke
+          build-args: |
+            LIBRARR_VERSION=${{ needs.variables.outputs.version }}
+            BUILD_BRANCH=${{ needs.variables.outputs.branch }}
+          cache-from: type=gha
+
+      - name: Smoke-test the image
+        # Start it, wait for /ping, check it reports the version being
+        # released, stop it. The version check is what catches an image
+        # that boots but was stamped with the 10.0.0.* placeholder -- which
+        # the app treats as an unofficial build (see the Dockerfile).
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          name=librarr-smoke
+          # 127.0.0.1 rather than localhost: the port is published on the
+          # IPv4 loopback only, and localhost may resolve to ::1 first.
+          host=http://127.0.0.1:8787
+
+          finish() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "::group::Container log"
+              docker logs "$name" 2>&1 | tail -n 200 || true
+              echo "::endgroup::"
+            fi
+            docker rm -f "$name" >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap finish EXIT
+
+          docker run -d --name "$name" -p 127.0.0.1:8787:8787 librarr:smoke >/dev/null
+
+          # First boot creates the database and runs every migration.
+          up=0
+          for _ in $(seq 1 180); do
+            if curl -fsS "$host/ping" >/dev/null 2>&1; then
+              up=1
+              break
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" != "true" ]; then
+              echo "::error::The container exited before answering /ping."
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$up" -ne 1 ]; then
+            echo "::error::The container never answered ${host}/ping."
+            exit 1
+          fi
+          echo "/ping answered"
+
+          # /api needs the key the app generated on first start.
+          api_key=$(docker exec "$name" cat /config/config.xml \
+            | sed -n 's/.*<ApiKey>\(.*\)<\/ApiKey>.*/\1/p')
+          if [ -z "$api_key" ]; then
+            echo "::error::No ApiKey in /config/config.xml."
+            exit 1
+          fi
+
+          reported=$(curl -fsS -H "X-Api-Key: ${api_key}" "$host/api/v1/system/status" | jq -r '.version')
+
+          # The image is stamped with the version minus its pre-release
+          # word (1.2.3-beta -> 1.2.3, 1.0.0-beta.4 -> 1.0.0.4), by the
+          # same sed the Dockerfile and build.sh use. An assembly version
+          # always has four parts, so pad both sides before comparing.
+          pad() {
+            local IFS=.
+            local -a parts
+            read -r -a parts <<< "$1"
+            while [ "${#parts[@]}" -lt 4 ]; do parts+=(0); done
+            echo "${parts[*]}"
+          }
+          expected=$(pad "$(printf '%s' "${VERSION}" | sed 's/-[A-Za-z][A-Za-z0-9]*//')")
+          reported_padded=$(pad "$reported")
+
+          echo "expected version: ${expected}"
+          echo "reported version: ${reported_padded} (raw: ${reported})"
+          if [ "$reported_padded" != "$expected" ]; then
+            echo "::error::The image reports version ${reported}, but this release is ${VERSION} (${expected}). Not pushing it."
+            exit 1
+          fi
+
+          docker stop "$name" >/dev/null
+          echo "Smoke test passed."
 
       - name: Log in to GHCR
-        # Zero-config — uses the workflow's built-in GITHUB_TOKEN. The
-        # release.yml `permissions:` block declares `packages: write`.
-        uses: docker/login-action@v4
+        # Zero-config — uses the workflow's built-in GITHUB_TOKEN. This
+        # job's `permissions:` block declares `packages: write`.
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -576,26 +758,38 @@ jobs:
         # Earlier attempt at `if: secrets.X != ''` gating broke workflow
         # validation, so we drop the conditional entirely now that
         # secrets are provisioned.
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Compute image tags
-        # Generates :<version> exact + :beta rolling pointer (only on
-        # beta tags) + :latest (only on non-prerelease tags).
+        # Every rule reads the computed version, never the ref. The rules
+        # used to be `type=ref,event=tag`, `type=semver` with no value, and
+        # two raw tags gated on github.ref_name. On a manual run the ref is
+        # a branch, so the first three produced nothing and the :latest
+        # gate -- "ref_name does not contain beta" -- was true for a beta
+        # dispatched from main.
+        #
+        # For a tag push the result is unchanged: v1.2.3-beta still yields
+        # :1.2.3-beta, :v1.2.3-beta and :beta; 1.3.0 yields :1.3.0, :1.3,
+        # :v1.3.0 and :latest. (metadata-action emits {{major}}.{{minor}}
+        # only for a non-prerelease version.) `latest=false` turns off the
+        # action's own guess so the explicit rule below is the only source.
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
             ghcr.io/${{ github.repository_owner }}/librarr
             docker.io/${{ secrets.DOCKERHUB_USERNAME }}/librarr
+          flavor: |
+            latest=false
           tags: |
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, 'alpha') && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'rc') }}
-            type=raw,value=beta,enable=${{ contains(github.ref_name, 'beta') }}
+            type=semver,pattern={{version}},value=${{ needs.variables.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.variables.outputs.version }}
+            type=raw,value=v${{ needs.variables.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.variables.outputs.channel == 'stable' }}
+            type=raw,value=beta,enable=${{ needs.variables.outputs.channel == 'beta' }}
           labels: |
             org.opencontainers.image.title=Librarr
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -606,7 +800,11 @@ jobs:
         # on the amd64 runner. Do NOT pass DOTNET_RID here — a single
         # build-arg applies to every platform and would pin all three
         # manifest entries to the same RID.
-        uses: docker/build-push-action@v7
+        #
+        # Only the amd64 image was started above. The arm64 and arm/v7
+        # images come from the same sources and the same Dockerfile, but
+        # nothing here runs them.
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: distribution/docker/Dockerfile
@@ -617,6 +815,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             LIBRARR_VERSION=${{ needs.variables.outputs.version }}
-            BUILD_BRANCH=${{ github.ref_name }}
+            BUILD_BRANCH=${{ needs.variables.outputs.branch }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
