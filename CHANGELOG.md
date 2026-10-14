@@ -7,6 +7,12 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.2.5-beta] — 2026-10-14
+
+A fix release for the blank page behind a reverse proxy in 1.2.4-beta,
+plus dependency updates. Read the bold line under Changed before
+upgrading if you create root folders through the API.
+
 ### Fixed
 
 - **A URL base works again behind a reverse proxy** ([#67](https://github.com/Rorqualx/Librarr/issues/67)).
@@ -17,6 +23,34 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
   attribute values, and the server only added the URL base to quoted
   ones. The build no longer lets webpack minify the HTML, and the server
   now adds the URL base whether or not a value is quoted.
+
+### Changed
+
+- **Saving a root folder with a quality profile that doesn't exist is now
+  rejected** with "Quality Profile does not exist" (HTTP 400). Before, the
+  check was skipped whenever an audiobook profile was also set, so an API
+  request with a nonexistent profile id was saved. The UI only offers
+  existing profiles and is not affected
+  ([#81](https://github.com/Rorqualx/Librarr/pull/81)).
+- Validation error responses from the API come from FluentValidation 11
+  (was 9). `propertyName`, `errorMessage`, `attemptedValue`, `severity`
+  and `isWarning` are unchanged; the always-empty
+  `formattedMessageArguments` is gone, and
+  `formattedMessagePlaceholderValues` gains `propertyPath`.
+- Font Awesome 7.3.1 (was 6.7). A few icons look slightly different.
+
+### Dependencies
+
+- Backend: Microsoft.Extensions.* and SignalR client 10.0.13 (the
+  caching and SignalR packages were still on 6.0), FluentValidation 11.12.0,
+  ImpromptuInterface 8.1.0, System.IO.Abstractions 22.3.0, NLog 5.5.1,
+  Sentry 4.13.0, Dapper 2.1.89, MailKit 4.18.1, Polly 8.8.0 and other
+  minor and patch updates.
+- Frontend: Font Awesome 7.3.1, react-google-recaptcha 3.1.0.
+- Build and test only: FluentAssertions 7.2.2 (the last Apache-licensed
+  major), vitest 4, Babel 7.29, postcss-mixins 12, Playwright 1.63, and
+  re-resolved transitive npm packages that clear every critical
+  `yarn audit` advisory.
 
 ## [1.2.4-beta] — 2026-10-12
 
@@ -969,7 +1003,8 @@ fork's code-level inventory.
 - Internal `Readarr.*` csproj rename / `NzbDrone.*` namespace
   rebrand (deliberately preserved).
 
-[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.4-beta...HEAD
+[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.5-beta...HEAD
+[1.2.5-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.4-beta...v1.2.5-beta
 [1.2.4-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.3-beta...v1.2.4-beta
 [1.2.3-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.2-beta...v1.2.3-beta
 [1.2.2-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.1-beta...v1.2.2-beta
