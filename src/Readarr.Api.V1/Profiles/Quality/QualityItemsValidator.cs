@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using FluentValidation;
-using FluentValidation.Validators;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Validation;
 
 namespace Readarr.Api.V1.Profiles.Quality
 {
@@ -10,7 +10,7 @@ namespace Readarr.Api.V1.Profiles.Quality
     {
         public static IRuleBuilderOptions<T, IList<QualityProfileQualityItemResource>> ValidItems<T>(this IRuleBuilder<T, IList<QualityProfileQualityItemResource>> ruleBuilder)
         {
-            ruleBuilder.SetValidator(new NotEmptyValidator(null));
+            ruleBuilder.NotEmpty();
             ruleBuilder.SetValidator(new AllowedValidator<T>());
             ruleBuilder.SetValidator(new QualityNameValidator<T>());
             ruleBuilder.SetValidator(new GroupItemValidator<T>());

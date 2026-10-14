@@ -1,4 +1,4 @@
-using FluentValidation.Validators;
+using NzbDrone.Core.Validation;
 
 namespace NzbDrone.Core.ImportLists.Exclusions
 {

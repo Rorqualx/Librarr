@@ -1,4 +1,3 @@
-using FluentValidation.Validators;
 using NzbDrone.Core.Profiles.Qualities;
 
 namespace NzbDrone.Core.Validation

@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using FluentValidation.Validators;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Validation;
 
 namespace NzbDrone.Core.Profiles.Delay
 {

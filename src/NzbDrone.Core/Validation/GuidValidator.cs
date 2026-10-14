@@ -1,5 +1,4 @@
 using System;
-using FluentValidation.Validators;
 
 namespace NzbDrone.Core.Validation
 {

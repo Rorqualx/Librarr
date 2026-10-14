@@ -1,5 +1,4 @@
-﻿using FluentValidation.Validators;
-using NzbDrone.Common.Disk;
+﻿using NzbDrone.Common.Disk;
 
 namespace NzbDrone.Core.Validation.Paths
 {
