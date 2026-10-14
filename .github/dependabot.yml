@@ -47,6 +47,12 @@ updates:
       # past 3.1.x needs a key in the build, or replacing the library.
       - dependency-name: "SixLabors.ImageSharp"
         versions: [">= 3.2.0"]
+      # FluentAssertions 8.0 moved from Apache 2.0 to a paid Xceed licence
+      # for any commercial use; 7.x stays Apache 2.0 and still gets critical
+      # fixes. Stay on 7.x. Leaving it would be a deliberate move, e.g. to
+      # the Apache-2.0 AwesomeAssertions fork, not a version bump.
+      - dependency-name: "FluentAssertions"
+        versions: [">= 8.0.0"]
 
   - package-ecosystem: "npm"
     # package.json + yarn.lock (Yarn 1) at the repository root.
@@ -56,6 +62,14 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     groups:
+      # Font Awesome's packages only work at one shared version: #72 moved
+      # free-regular-svg-icons alone to 7.x and the build failed against
+      # the 6.x svg-core. This group takes every update type, majors
+      # included, so the family always arrives as one PR. It is listed
+      # first because a dependency joins the first group that matches it.
+      fontawesome:
+        patterns:
+          - "@fortawesome/*"
       npm-minor-patch:
         update-types:
           - "minor"
