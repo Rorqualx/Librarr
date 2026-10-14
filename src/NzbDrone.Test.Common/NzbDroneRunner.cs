@@ -28,14 +28,16 @@ namespace NzbDrone.Test.Common
         public string ApiKey { get; private set; }
         public PostgresOptions PostgresOptions { get; private set; }
         public int Port { get; private set; }
+        public string UrlBase { get; private set; }
 
-        public NzbDroneRunner(Logger logger, PostgresOptions postgresOptions, int port = 8787)
+        public NzbDroneRunner(Logger logger, PostgresOptions postgresOptions, int port = 8787, string urlBase = "")
         {
             _processProvider = new ProcessProvider(logger);
-            _restClient = new RestClient($"http://localhost:{port}/api/v1");
+            _restClient = new RestClient($"http://localhost:{port}{urlBase}/api/v1");
 
             PostgresOptions = postgresOptions;
             Port = port;
+            UrlBase = urlBase;
         }
 
         public void Start(bool enableAuth = false)
@@ -297,7 +299,8 @@ namespace NzbDrone.Test.Common
                              new XElement(nameof(ConfigFileProvider.AnalyticsEnabled), false),
                              new XElement(nameof(ConfigFileProvider.AuthenticationMethod), enableAuth ? "Forms" : "None"),
                              new XElement(nameof(ConfigFileProvider.AuthenticationRequired), "DisabledForLocalAddresses"),
-                             new XElement(nameof(ConfigFileProvider.Port), Port)));
+                             new XElement(nameof(ConfigFileProvider.Port), Port),
+                             new XElement(nameof(ConfigFileProvider.UrlBase), UrlBase)));
 
             var data = xDoc.ToString();
 
