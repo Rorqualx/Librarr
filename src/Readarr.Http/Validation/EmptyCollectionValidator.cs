@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
-using FluentValidation.Validators;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Validation;
 
 namespace Readarr.Http.Validation
 {

@@ -1,8 +1,8 @@
 using System;
 using System.IO;
-using FluentValidation.Validators;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.Validation;
 
 namespace Readarr.Api.V1.Author
 {

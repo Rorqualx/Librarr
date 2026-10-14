@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Core.Profiles.Delay;
+using NzbDrone.Core.Validation;
 using NzbDrone.Http.REST.Attributes;
 using Readarr.Http;
 using Readarr.Http.REST;
