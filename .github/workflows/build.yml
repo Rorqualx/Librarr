@@ -672,8 +672,8 @@ jobs:
     # and nothing ever set that — which is precisely the blind spot three
     # of the .NET 10 migration misses survived in.
     #
-    # Split by network dependence rather than by convenience. Ten of the
-    # sixteen tests drive a local instance only; those block the build.
+    # Split by network dependence rather than by convenience. Eleven of the
+    # seventeen tests drive a local instance only; those block the build.
     # The other six seed a library through the API, which is a live
     # OpenLibrary fetch, so they run as a step that is allowed to fail.
     # A third party rate-limiting us is not a reason to redden main, and

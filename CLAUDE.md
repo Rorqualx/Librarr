@@ -130,7 +130,7 @@ number that is wrong is worse than no number, because it gets trusted.
 
   | Suite | Where it runs | Blocking? |
   |---|---|---|
-  | `NzbDrone.Playwright.Test`, 10 local-only tests | `build.yml` per push | **yes** |
+  | `NzbDrone.Playwright.Test`, 11 local-only tests (incl. URL-base regression) | `build.yml` per push | **yes** |
   | `NzbDrone.Playwright.Test`, 6 `RequiresOpenLibrary` | `build.yml` per push | no |
   | `Category=IntegrationTest` minus the integration suite (HttpClientFixture's 54) | `build.yml` per push | no |
   | `NzbDrone.Integration.Test` (94) | `nightly-integration.yml`, one fixture at a time | n/a (scheduled) |
