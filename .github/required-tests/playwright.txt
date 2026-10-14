@@ -1,0 +1,5 @@
+# Regression tests the "Playwright smoke" job's blocking step must run AND
+# pass. Same format and checks as unit.txt.
+
+# Issue #67: the UI served under a URL base, as behind a reverse proxy.
+NzbDrone.Playwright.Test.UrlBaseTest.ui_loads_with_every_request_under_the_url_base
