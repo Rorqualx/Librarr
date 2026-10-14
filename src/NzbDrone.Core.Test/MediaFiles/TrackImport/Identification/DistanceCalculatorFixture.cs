@@ -294,7 +294,7 @@ namespace NzbDrone.Core.Test.MediaFiles.BookImport.Identification
 
             // In the list, in either format: the isbn bucket, at distance 0.
             var listed = Score("9780441172719", null, work);
-            listed.Penalties.Should().ContainKey("isbn").WhichValue.Should().Equal(0.0);
+            listed.Penalties.Should().ContainKey("isbn").WhoseValue.Should().Equal(0.0);
             listed.Penalties.Should().NotContainKey("isbn_missing");
             Score("0441172717", null, work).Penalties.Should().ContainKey("isbn");
 
