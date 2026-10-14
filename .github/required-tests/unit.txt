@@ -1,0 +1,9 @@
+# Regression tests the "Unit tests (Linux)" job must run AND pass.
+# Checked against TestResult.xml by scripts/assert_tests_ran.py in CI, and
+# against the source and build.yml by the pre-commit hook
+# (scripts/check_required_tests_wired.py). One full name or prefix per
+# line; ">=N" requires at least N test cases under it.
+
+# Issue #67: index.html assets lost the URL base when webpack's minifier
+# dropped attribute quotes.
+NzbDrone.Api.Test.Frontend.IndexHtmlMapperFixture >=8

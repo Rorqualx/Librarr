@@ -213,3 +213,6 @@ OUTREACH-*.md
 .idea/
 *.swp
 *.swo
+
+# Python bytecode from scripts/*.py
+__pycache__/

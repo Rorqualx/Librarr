@@ -11,7 +11,13 @@ namespace Readarr.Http.Frontend.Mappers
     {
         private readonly IDiskProvider _diskProvider;
         private readonly Lazy<ICacheBreakerProvider> _cacheBreakProviderFactory;
-        private static readonly Regex ReplaceRegex = new Regex(@"(?:(?<attribute>href|src)=\"")(?<path>.*?(?<extension>css|js|png|ico|ics|svg|json))(?:\"")(?:\s(?<nohash>data-no-hash))?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        // The value may be double-quoted, single-quoted or unquoted: an HTML
+        // minifier is free to drop the quotes, and webpack 5.111's did, which
+        // left every asset in index.html without the URL base (issue #67).
+        // An unquoted value ends at whitespace or the end of the tag, so
+        // "manifest.json" is not cut short at "manifest.js".
+        private static readonly Regex ReplaceRegex = new Regex(@"(?<attribute>href|src)=(?:""(?<path>[^""]*?(?<extension>css|js|png|ico|ics|svg|json))""|'(?<path>[^']*?(?<extension>css|js|png|ico|ics|svg|json))'|(?<path>[^""'\s>]*?(?<extension>css|js|png|ico|ics|svg|json))(?=[\s>]))(?:\s(?<nohash>data-no-hash))?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private string _generatedContent;
 
