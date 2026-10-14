@@ -101,7 +101,7 @@
     "@types/lodash": "4.17.26",
     "@types/react-lazyload": "3.2.3",
     "@types/redux-actions": "2.6.5",
-    "@typescript-eslint/eslint-plugin": "6.21.0",
+    "@typescript-eslint/eslint-plugin": "7.0.0",
     "@typescript-eslint/parser": "6.21.0",
     "autoprefixer": "10.6.1",
     "babel-loader": "9.2.1",
