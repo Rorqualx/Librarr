@@ -1,5 +1,4 @@
-﻿using FluentValidation.Validators;
-using NzbDrone.Common.EnvironmentInfo;
+﻿using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 
 namespace NzbDrone.Core.Validation.Paths

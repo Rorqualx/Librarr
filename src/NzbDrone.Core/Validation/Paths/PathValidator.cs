@@ -1,5 +1,4 @@
 using FluentValidation;
-using FluentValidation.Validators;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 
