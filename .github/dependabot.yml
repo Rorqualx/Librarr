@@ -29,6 +29,14 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     groups:
+      # System.IO.Abstractions and its TestingHelpers only work at one
+      # shared version: #85 moved the first alone to 22.x, and every test
+      # that touches MockFileSystem threw TypeLoadException against the
+      # 17.x helpers. Same fix as the npm `fontawesome` group: every update
+      # type, majors included, listed first so the pair arrives as one PR.
+      system-io-abstractions:
+        patterns:
+          - "System.IO.Abstractions*"
       nuget-minor-patch:
         update-types:
           - "minor"
