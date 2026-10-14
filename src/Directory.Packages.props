@@ -31,10 +31,10 @@
          three at >= its own version. Leaving them on 6.0.x is NU1605
          ("package downgrade") in every project that references them
          directly, and the build treats that as an error. -->
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="6.34.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <!-- 1.40.0 shipped Chromium 1091 (Nov 2023). That browser build crashes
@@ -51,7 +51,7 @@
     <PackageVersion Include="MonoTorrent" Version="2.0.7" />
     <PackageVersion Include="NBuilder" Version="6.1.0" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageVersion Include="NLog.Extensions.Logging" Version="5.2.3" />
+    <PackageVersion Include="NLog.Extensions.Logging" Version="5.5.0" />
     <PackageVersion Include="NLog" Version="5.5.1" />
     <PackageVersion Include="NLog.Targets.Syslog" Version="7.0.0" />
     <PackageVersion Include="Npgsql" Version="7.0.10" />
@@ -67,7 +67,7 @@
     <PackageVersion Include="SharpZipLib" Version="1.4.2" />
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageVersion Include="StyleCop.Analyzers" Version="1.1.118" />
-    <PackageVersion Include="Swashbuckle.AspNetCore.Annotations" Version="6.6.2" />
+    <PackageVersion Include="Swashbuckle.AspNetCore.Annotations" Version="6.9.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore.SwaggerGen" Version="6.9.0" />
     <PackageVersion Include="System.Configuration.ConfigurationManager" Version="6.0.2" />
     <PackageVersion Include="System.Data.SQLite.Core.Servarr" Version="1.0.115.5-18" />
@@ -76,7 +76,7 @@
     <PackageVersion Include="System.IO.Abstractions" Version="22.3.0" />
     <PackageVersion Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
     <PackageVersion Include="System.Reflection.TypeExtensions" Version="4.7.0" />
-    <PackageVersion Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
+    <PackageVersion Include="System.ServiceProcess.ServiceController" Version="10.0.13" />
     <PackageVersion Include="System.ValueTuple" Version="4.6.2" />
     <PackageVersion Include="TagLibSharp-Lidarr" Version="2.2.0.19" />
   </ItemGroup>
