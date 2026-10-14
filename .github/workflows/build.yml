@@ -182,6 +182,20 @@ jobs:
           TEST_DIR: _tests/net10.0/linux-x64/publish
         run: ./test.sh Linux Unit Coverage
 
+      - name: Check the required regression tests ran
+        # A test that never runs is not a failure to dotnet test: a changed
+        # filter, a renamed fixture or an [Ignore] leaves the step above
+        # green. This reads TestResult.xml and fails unless every test in
+        # the list ran and passed. Runs after a test failure too, so the
+        # log says which regression tests were affected; not on cancel.
+        # The checker's own tests come first: a broken checker would
+        # otherwise wave everything through.
+        if: success() || failure()
+        shell: bash
+        run: |
+          python3 scripts/test_assert_tests_ran.py
+          python3 scripts/assert_tests_ran.py TestResult.xml .github/required-tests/unit.txt
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
@@ -777,6 +791,14 @@ jobs:
           dotnet test _tests/net10.0/linux-x64/publish/Readarr.Playwright.Test.dll \
             --filter 'Category!=RequiresOpenLibrary' \
             --logger 'nunit;LogFilePath=PlaywrightResult.xml'
+
+      - name: Check the required regression tests ran
+        # As in the unit job. The whole suite is behind
+        # READARR_RUN_PLAYWRIGHT=1; without it every test is ignored and
+        # dotnet test still exits 0, so this is what notices.
+        if: success() || failure()
+        shell: bash
+        run: python3 scripts/assert_tests_ran.py PlaywrightResult.xml .github/required-tests/playwright.txt
 
       - name: Playwright — live OpenLibrary (non-blocking)
         # always(), so a failure in the blocking step above still yields

@@ -11,6 +11,7 @@
 #                               / Directory.Build.props / BookInfoProxy.cs
 #   SKIP_FORMAT_CHECK=1         skip the `dotnet format --verify-no-changes` step
 #   SKIP_LINT=1                 skip the yarn lint / stylelint step
+#   SKIP_REQUIRED_TESTS_CHECK=1 skip the required-regression-tests wiring check
 set -uo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -206,10 +207,36 @@ if [ "${SKIP_LINT:-0}" != "1" ] && [ -n "$CSS_FILES" ]; then
     fi
 fi
 
+# --- 9. Required regression tests still wired into CI ---------------------
+# The tests in .github/required-tests/*.txt guard bugs that shipped once
+# (issue #67). Statically check they still exist, are not [Ignore]d or
+# [Explicit], are not filtered out of their CI step, and that the step
+# still un-gates the suite and checks the result file. Under a second;
+# runs on every commit, since a rename anywhere in src/ can break it.
+# CI checks again from the result files, which is the real proof.
+if [ "${SKIP_REQUIRED_TESTS_CHECK:-0}" != "1" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+        if ! WIRING=$(python3 scripts/check_required_tests_wired.py 2>&1); then
+            while IFS= read -r line; do
+                [ -n "$line" ] && err "$line"
+            done <<< "$WIRING"
+            err "A required regression test would stop running in CI. Fix it, or change .github/required-tests/ deliberately."
+        fi
+
+        if printf '%s' "$STAGED_FILES" | grep -E '^scripts/(assert_tests_ran|test_assert_tests_ran)\.py$' >/dev/null; then
+            if ! python3 scripts/test_assert_tests_ran.py >/dev/null 2>&1; then
+                err "scripts/test_assert_tests_ran.py failed. Run it for details."
+            fi
+        fi
+    else
+        echo "  [pre-commit] python3 missing — required-tests check skipped." >&2
+    fi
+fi
+
 if [ $FAIL -ne 0 ]; then
     echo "" >&2
     echo "  [pre-commit] commit aborted; see violations above." >&2
-    echo "  Bypass at your own risk: ACK_FRAGILE=1, SKIP_FORMAT_CHECK=1, SKIP_LINT=1" >&2
+    echo "  Bypass at your own risk: ACK_FRAGILE=1, SKIP_FORMAT_CHECK=1, SKIP_LINT=1, SKIP_REQUIRED_TESTS_CHECK=1" >&2
     exit 1
 fi
 exit 0

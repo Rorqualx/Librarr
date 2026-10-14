@@ -213,7 +213,14 @@ number that is wrong is worse than no number, because it gets trusted.
   (`src/Directory.Build.props:11`). Windows-on-ARM is unsupported.
 - **`config.xml` reload-on-change is disabled** (`Bootstrap.cs:237`) —
   changes to bootstrap config require a restart.
-- **No pre-commit hooks** — lint runs in CI only.
+- **Pre-commit hook is opt-in** (`git config core.hooksPath .githooks`);
+  CI is the real gate, and Dependabot never runs local hooks.
+- **Required regression tests** are listed in `.github/required-tests/`
+  (`unit.txt`, `playwright.txt`). CI fails unless each one *ran and
+  passed* (`scripts/assert_tests_ran.py` reads the NUnit result file), since a
+  skipped or filtered-out test leaves `dotnet test` green. The pre-commit
+  hook checks the same wiring statically (`scripts/check_required_tests_wired.py`).
+  When a bug ships, add its regression test there.
 - **Upstream Readarr is retired** — any changes here diverge from the
   rest of the Servarr ecosystem. Librarr is the continuation; the
   fork swaps `bookinfo.club` for native OpenLibrary as the primary
