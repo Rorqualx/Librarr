@@ -7,6 +7,17 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Fixed
+
+- **A URL base works again behind a reverse proxy** ([#67](https://github.com/Rorqualx/Librarr/issues/67)).
+  1.2.4-beta showed a blank page at e.g. `example.net/readarr/`: the page
+  asked for its scripts and stylesheets at `/index-….js` and
+  `/Content/…` instead of under `/readarr/`. The webpack upgrade in that
+  release minified `index.html` itself and dropped the quotes around
+  attribute values, and the server only added the URL base to quoted
+  ones. The build no longer lets webpack minify the HTML, and the server
+  now adds the URL base whether or not a value is quoted.
+
 ## [1.2.4-beta] — 2026-10-12
 
 The fixes from a full audit of the fork: security hardening, the Readarr

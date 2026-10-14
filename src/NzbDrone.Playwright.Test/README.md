@@ -3,20 +3,28 @@
 End-to-end smoke suite, replacing the gated legacy Selenium suite
 (`src/NzbDrone.Automation.Test/`, retired but kept for git blame).
 
-Scope today: **14 tests**, in three tiers.
+Scope today: **17 tests**, in three tiers.
 
 | Fixture | Tests | Needs |
 |---|---|---|
 | `MainPagesTest` | 7 | — |
 | `NarratorPageTest` | 1 | — |
 | `SettingsFormsTest` | 2 | — |
+| `UrlBaseTest` | 1 | — (starts its own instance on 8788) |
 | `AddAuthorSearchTest` | 2 | OpenLibrary |
+| `BookDetailsTest` | 2 | OpenLibrary + a seeded library |
 | `SeededLibraryTest` | 2 | OpenLibrary + a seeded library |
 
 The first tier mounts a page and asserts a page-specific DOM anchor
 exists. The second and third assert on rendered content, so they make a
 real OpenLibrary call — see `LibrarySeeder` for why they degrade to
 `Inconclusive` rather than failing when OL is unreachable.
+
+`UrlBaseTest` is the regression point for serving under a URL base
+(issue #67). It boots a second instance with `UrlBase=/readarr` and fails
+if any request the page makes is outside `/readarr/` or comes back
+4xx/5xx. That is the only way the bug shows: without a reverse proxy in
+front, a root-relative asset still resolves, so the page renders fine.
 
 Visual regression is still out of scope; that's gated on the OL cassette
 work in the roadmap.
@@ -101,10 +109,10 @@ assembles the app tree by hand and copies the `.playwright` driver into
 the publish folder, because neither is where a per-RID publish puts it.
 
 ```bash
-# All 16
+# All 17
 READARR_RUN_PLAYWRIGHT=1 dotnet test src/NzbDrone.Playwright.Test/
 
-# Only the 10 that need no network. The six that seed a library through
+# Only the 11 that need no network. The six that seed a library through
 # the API perform a live OpenLibrary fetch and carry the
 # RequiresOpenLibrary category; filter on that rather than on fixture
 # names, which go stale the moment a seeded fixture is added.

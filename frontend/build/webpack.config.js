@@ -74,7 +74,15 @@ module.exports = (env) => {
 
     optimization: {
       moduleIds: 'deterministic',
-      chunkIds: isProduction ? 'deterministic' : 'named'
+      chunkIds: isProduction ? 'deterministic' : 'named',
+      minimizeOptions: {
+        // webpack 5.111 minifies emitted .html itself in production and drops
+        // attribute quotes. The server rewrites index.html/login.html at
+        // request time (HtmlMapperBase) to add the URL base and cache
+        // breakers; leave the HTML to HtmlWebpackPlugin's own minifier,
+        // which keeps the quotes.
+        html: false
+      }
     },
 
     performance: {
