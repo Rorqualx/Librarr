@@ -337,13 +337,21 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
             ProcessRequest(request, settings);
         }
 
-        private HttpRequestBuilder BuildRequest(QBittorrentSettings settings)
+        private static HttpRequestBuilder BuildRequest(QBittorrentSettings settings)
         {
+            // No Basic credential: qBittorrent authenticates with the login cookie
+            // or, since 5.2, an API key. 5.2+ answers a Basic header (even an empty
+            // one) with 401, which broke the connection test (#101).
             var requestBuilder = new HttpRequestBuilder(settings.UseSsl, settings.Host, settings.Port, settings.UrlBase)
             {
-                LogResponseContent = true,
-                NetworkCredential = new BasicNetworkCredential(settings.Username, settings.Password)
+                LogResponseContent = true
             };
+
+            if (settings.ApiKey.IsNotNullOrWhiteSpace())
+            {
+                requestBuilder.Headers["Authorization"] = $"Bearer {settings.ApiKey}";
+            }
+
             return requestBuilder;
         }
 
@@ -357,6 +365,32 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
 
         private string ProcessRequest(HttpRequestBuilder requestBuilder, QBittorrentSettings settings)
         {
+            if (settings.ApiKey.IsNotNullOrWhiteSpace())
+            {
+                var apiKeyRequest = requestBuilder.Build();
+                apiKeyRequest.LogResponseContent = true;
+
+                try
+                {
+                    return _httpClient.Execute(apiKeyRequest).Content;
+                }
+                catch (HttpException ex)
+                {
+                    if (ex.Response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                    {
+                        _logger.Debug(ex, "qbitTorrent authentication failed.");
+
+                        throw new DownloadClientAuthenticationException("Failed to authenticate with qBittorrent.", ex);
+                    }
+
+                    throw new DownloadClientException("Failed to connect to qBittorrent, check your settings.", ex);
+                }
+                catch (WebException ex)
+                {
+                    throw new DownloadClientException("Failed to connect to qBittorrent, please check your settings.", ex);
+                }
+            }
+
             AuthenticateClient(requestBuilder, settings);
 
             var request = requestBuilder.Build();
@@ -424,8 +458,9 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
                 }
                 catch (HttpException ex)
                 {
-                    _logger.Debug("qbitTorrent authentication failed.");
-                    if (ex.Response.StatusCode == HttpStatusCode.Forbidden)
+                    _logger.Debug(ex, "qbitTorrent authentication failed.");
+
+                    if (ex.Response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
                     {
                         throw new DownloadClientAuthenticationException("Failed to authenticate with qBittorrent.", ex);
                     }
@@ -437,8 +472,8 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
                     throw new DownloadClientUnavailableException("Failed to connect to qBittorrent, please check your settings.", ex);
                 }
 
-                // returns "Fails." on bad login
-                if (response.Content != "Ok.")
+                // Returns "Fails." on a bad login. Some versions return an empty body on success.
+                if (response.Content.IsNotNullOrWhiteSpace() && response.Content != "Ok.")
                 {
                     _logger.Debug("qbitTorrent authentication failed.");
                     throw new DownloadClientAuthenticationException("Failed to authenticate with qBittorrent.");
