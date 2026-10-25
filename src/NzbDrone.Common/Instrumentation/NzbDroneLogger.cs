@@ -149,13 +149,18 @@ namespace NzbDrone.Common.Instrumentation
             fileTarget.FileName = Path.Combine(appFolderInfo.GetLogFolder(), fileName);
             fileTarget.AutoFlush = true;
             fileTarget.KeepFileOpen = false;
-            fileTarget.ConcurrentWrites = false;
-            fileTarget.ConcurrentWriteAttemptDelay = 50;
-            fileTarget.ConcurrentWriteAttempts = 10;
             fileTarget.ArchiveAboveSize = 1024000;
             fileTarget.MaxArchiveFiles = maxArchiveFiles;
             fileTarget.EnableFileDelete = true;
-            fileTarget.ArchiveNumbering = ArchiveNumberingMode.Rolling;
+
+            // NLog 6 no longer renames the active file on archive; it rolls on to
+            // readarr.1.txt, readarr.2.txt and leaves readarr.txt stale. Setting
+            // ArchiveFileName to the same path restores the File.Move behaviour, so
+            // readarr.txt stays the live log. The suffix keeps archives named
+            // readarr.N.txt: the Logs page only serves [-.a-zA-Z0-9]+.txt, and NLog 6's
+            // default "_00" suffix has an underscore.
+            fileTarget.ArchiveFileName = fileTarget.FileName;
+            fileTarget.ArchiveSuffixFormat = ".{0}";
             fileTarget.Layout = FILE_LOG_LAYOUT;
 
             var loggingRule = new LoggingRule("*", minLogLevel, fileTarget);
@@ -172,9 +177,6 @@ namespace NzbDrone.Common.Instrumentation
             fileTarget.FileName = Path.Combine(appFolderInfo.GetUpdateLogFolder(), DateTime.Now.ToString("yyyy.MM.dd-HH.mm") + ".txt");
             fileTarget.AutoFlush = true;
             fileTarget.KeepFileOpen = false;
-            fileTarget.ConcurrentWrites = false;
-            fileTarget.ConcurrentWriteAttemptDelay = 50;
-            fileTarget.ConcurrentWriteAttempts = 100;
             fileTarget.Layout = FILE_LOG_LAYOUT;
 
             var loggingRule = new LoggingRule("*", LogLevel.Trace, fileTarget);

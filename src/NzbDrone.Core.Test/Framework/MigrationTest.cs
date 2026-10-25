@@ -40,7 +40,7 @@ namespace NzbDrone.Core.Test.Framework
 
         protected override void SetupLogging()
         {
-            Mocker.SetConstant<ILoggerProvider>(Mocker.Resolve<NLogLoggerProvider>());
+            Mocker.SetConstant<ILoggerProvider>(new NLogLoggerProvider());
         }
 
         [SetUp]
