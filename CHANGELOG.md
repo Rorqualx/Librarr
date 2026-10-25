@@ -7,6 +7,13 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.2.6-beta] — 2026-10-25
+
+qBittorrent 5.2 and later connect again, with optional API key login.
+Also two API requests that returned a server error now return a
+validation error, plus dependency updates (Npgsql 10, NLog 6,
+MonoTorrent 3).
+
 ### Added
 
 - **qBittorrent API key.** qBittorrent 5.2 can issue an API key
@@ -1045,7 +1052,8 @@ fork's code-level inventory.
 - Internal `Readarr.*` csproj rename / `NzbDrone.*` namespace
   rebrand (deliberately preserved).
 
-[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.5-beta...HEAD
+[Unreleased]: https://github.com/Rorqualx/Librarr/compare/v1.2.6-beta...HEAD
+[1.2.6-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.5-beta...v1.2.6-beta
 [1.2.5-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.4-beta...v1.2.5-beta
 [1.2.4-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.3-beta...v1.2.4-beta
 [1.2.3-beta]: https://github.com/Rorqualx/Librarr/compare/v1.2.2-beta...v1.2.3-beta
