@@ -7,6 +7,48 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+
+- **qBittorrent API key.** qBittorrent 5.2 can issue an API key
+  (Options → Web UI → Authentication). Paste it into the new **API Key** field of the
+  qBittorrent download client and leave Username and Password empty.
+  Librarr then authenticates with it instead of logging in.
+
+### Fixed
+
+- **qBittorrent 5.2 and later connect again** ([#101](https://github.com/Rorqualx/Librarr/issues/101)).
+  The login check failed on qBittorrent 5.2's empty login response,
+  Librarr sent a Basic auth header that 5.2 rejects, and a 401 wasn't
+  treated as a login failure. Also, a wrong password could pass the
+  connection test after one good login, because the session cookie went
+  into a jar shared across the app. qBittorrent cookies are now kept
+  out of that jar. Tested against qBittorrent 5.2 with a password and
+  with an API key.
+- **Saving a relative recycle bin path** now returns a validation error
+  (HTTP 400) instead of a server error (HTTP 500)
+  ([#96](https://github.com/Rorqualx/Librarr/issues/96)).
+- **Saving a quality profile that sets a minimum custom format score but
+  has no custom formats** now returns a validation error (HTTP 400)
+  instead of a server error (HTTP 500)
+  ([#97](https://github.com/Rorqualx/Librarr/issues/97)).
+- **The log file API's `contentsUrl` works.** It pointed at
+  `/api/v1//readarr.txt` (and `/api/v1/update/…` for update logs), both
+  404. It now points at `/api/v1/log/file/…` and `/api/v1/log/file/update/…`.
+  The Logs page uses the download links and was not affected
+  ([#108](https://github.com/Rorqualx/Librarr/pull/108)).
+
+### Dependencies
+
+- Backend: Npgsql 10.0.3 (was 7.0; the PostgreSQL 14 and 18 test suites
+  pass), NLog 6.2.2 (was 5.5; log file names, rotation and the Logs page
+  are unchanged), MonoTorrent 3.0.2 (was 2.0; torrent info hashes are
+  unchanged).
+- Frontend: reselect 5.3.0.
+- Build and test only: Microsoft.NET.Test.Sdk 18.11.0,
+  Microsoft.SourceLink.GitHub 10.0.402, @typescript-eslint/eslint-plugin 7,
+  postcss-loader 8.2.1, @babel/eslint-parser 7.29.9 and
+  @babel/plugin-proposal-export-default-from 7.29.7.
+
 ## [1.2.5-beta] — 2026-10-14
 
 A fix release for the blank page behind a reverse proxy in 1.2.4-beta,
