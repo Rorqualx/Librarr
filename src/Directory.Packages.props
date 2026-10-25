@@ -36,7 +36,7 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="6.34.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <!-- 1.40.0 shipped Chromium 1091 (Nov 2023). That browser build crashes
          intermittently on current macOS: roughly one run in three died with
          TargetClosedException mid-navigation, which reads as "the smoke suite
