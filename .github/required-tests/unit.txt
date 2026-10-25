@@ -11,3 +11,6 @@ NzbDrone.Api.Test.Frontend.IndexHtmlMapperFixture >=8
 # Issue #97: a positive minimum custom format score with no custom formats
 # threw "Sequence contains no elements" (HTTP 500) instead of a 400.
 NzbDrone.Api.Test.Profiles.QualityProfileValidationFixture >=4
+# Issue #96: a relative recycle bin path reached a disk validator that
+# throws on invalid paths (HTTP 500) instead of returning a 400.
+NzbDrone.Api.Test.Config.MediaManagementConfigValidationFixture >=3

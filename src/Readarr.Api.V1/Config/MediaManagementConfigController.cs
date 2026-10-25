@@ -21,7 +21,9 @@ namespace Readarr.Api.V1.Config
                                            RootFolderValidator rootFolderValidator)
             : base(configService)
         {
-            SharedValidator.RuleFor(c => c.RecycleBin).IsValidPath()
+            // Stop at the first failure: the disk validators below throw on an invalid path.
+            SharedValidator.RuleFor(c => c.RecycleBin).Cascade(CascadeMode.Stop)
+                                                      .IsValidPath()
                                                       .SetValidator(folderWritableValidator)
                                                       .SetValidator(rootFolderValidator)
                                                       .SetValidator(pathExistsValidator)
