@@ -36,7 +36,7 @@ namespace Readarr.Api.V1.Profiles.Quality
             SharedValidator.RuleFor(c => c).Custom((profile, context) =>
             {
                 if (profile.FormatItems.Where(x => x.Score > 0).Sum(x => x.Score) < profile.MinFormatScore &&
-                    profile.FormatItems.Max(x => x.Score) < profile.MinFormatScore)
+                    profile.FormatItems.Select(x => x.Score).DefaultIfEmpty(0).Max() < profile.MinFormatScore)
                 {
                     context.AddFailure("Minimum Custom Format Score can never be satisfied");
                 }

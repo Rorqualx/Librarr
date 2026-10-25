@@ -7,3 +7,7 @@
 # Issue #67: index.html assets lost the URL base when webpack's minifier
 # dropped attribute quotes.
 NzbDrone.Api.Test.Frontend.IndexHtmlMapperFixture >=8
+
+# Issue #97: a positive minimum custom format score with no custom formats
+# threw "Sequence contains no elements" (HTTP 500) instead of a 400.
+NzbDrone.Api.Test.Profiles.QualityProfileValidationFixture >=4
