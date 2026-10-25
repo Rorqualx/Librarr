@@ -27,6 +27,7 @@ namespace NzbDrone.Common.Http
         public bool ConnectionKeepAlive { get; set; }
         public TimeSpan RateLimit { get; set; }
         public bool LogResponseContent { get; set; }
+        public bool StoreRequestCookie { get; set; }
         public ICredentials NetworkCredential { get; set; }
         public Dictionary<string, string> Cookies { get; private set; }
         public List<HttpFormData> FormData { get; private set; }
@@ -44,6 +45,7 @@ namespace NzbDrone.Common.Http
             Cookies = new Dictionary<string, string>();
             FormData = new List<HttpFormData>();
             LogHttpError = true;
+            StoreRequestCookie = true;
         }
 
         public HttpRequestBuilder(bool useHttps, string host, int port, string urlBase = null)
@@ -110,6 +112,7 @@ namespace NzbDrone.Common.Http
             request.ConnectionKeepAlive = ConnectionKeepAlive;
             request.RateLimit = RateLimit;
             request.LogResponseContent = LogResponseContent;
+            request.StoreRequestCookie = StoreRequestCookie;
             request.Credentials = NetworkCredential;
 
             foreach (var header in Headers)

@@ -85,6 +85,15 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.QBittorrentTests
         }
 
         [Test]
+        public void should_not_store_the_session_cookie_in_the_shared_cookie_jar()
+        {
+            Subject.GetVersion(GivenSettings("admin", "secret"));
+
+            ApiRequests.Should().NotBeEmpty();
+            _requests.Should().OnlyContain(r => !r.StoreRequestCookie);
+        }
+
+        [Test]
         public void should_not_send_a_credential_when_none_is_configured()
         {
             Subject.GetVersion(GivenSettings());

@@ -342,9 +342,13 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
             // No Basic credential: qBittorrent authenticates with the login cookie
             // or, since 5.2, an API key. 5.2+ answers a Basic header (even an empty
             // one) with 401, which broke the connection test (#101).
+            // Keep the session cookie out of the shared cookie jar: qBittorrent
+            // accepts a login that carries a valid session whatever the password,
+            // so a stored cookie made a wrong password pass the test.
             var requestBuilder = new HttpRequestBuilder(settings.UseSsl, settings.Host, settings.Port, settings.UrlBase)
             {
-                LogResponseContent = true
+                LogResponseContent = true,
+                StoreRequestCookie = false
             };
 
             if (settings.ApiKey.IsNotNullOrWhiteSpace())

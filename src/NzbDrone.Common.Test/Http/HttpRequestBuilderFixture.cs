@@ -36,5 +36,20 @@ namespace NzbDrone.Common.Test.Http
 
             request.Url.FullUri.Should().Be("http://domain/v1/");
         }
+
+        [Test]
+        public void should_store_request_cookies_by_default()
+        {
+            new HttpRequestBuilder("http://domain/").Build().StoreRequestCookie.Should().BeTrue();
+        }
+
+        [Test]
+        public void should_pass_store_request_cookie_to_request()
+        {
+            var builder = new HttpRequestBuilder("http://domain/") { StoreRequestCookie = false };
+
+            builder.Build().StoreRequestCookie.Should().BeFalse();
+            builder.Clone().Build().StoreRequestCookie.Should().BeFalse();
+        }
     }
 }
