@@ -149,13 +149,12 @@ namespace NzbDrone.Common.Instrumentation
             fileTarget.FileName = Path.Combine(appFolderInfo.GetLogFolder(), fileName);
             fileTarget.AutoFlush = true;
             fileTarget.KeepFileOpen = false;
-            fileTarget.ConcurrentWrites = false;
-            fileTarget.ConcurrentWriteAttemptDelay = 50;
-            fileTarget.ConcurrentWriteAttempts = 10;
             fileTarget.ArchiveAboveSize = 1024000;
             fileTarget.MaxArchiveFiles = maxArchiveFiles;
             fileTarget.EnableFileDelete = true;
-            fileTarget.ArchiveNumbering = ArchiveNumberingMode.Rolling;
+            // NLog 6 dropped rolling numbering; its default suffix is "_00", but the
+            // Logs page only serves names matching [-.a-zA-Z0-9]+.txt. Keep readarr.N.txt.
+            fileTarget.ArchiveSuffixFormat = ".{0}";
             fileTarget.Layout = FILE_LOG_LAYOUT;
 
             var loggingRule = new LoggingRule("*", minLogLevel, fileTarget);
@@ -172,9 +171,6 @@ namespace NzbDrone.Common.Instrumentation
             fileTarget.FileName = Path.Combine(appFolderInfo.GetUpdateLogFolder(), DateTime.Now.ToString("yyyy.MM.dd-HH.mm") + ".txt");
             fileTarget.AutoFlush = true;
             fileTarget.KeepFileOpen = false;
-            fileTarget.ConcurrentWrites = false;
-            fileTarget.ConcurrentWriteAttemptDelay = 50;
-            fileTarget.ConcurrentWriteAttempts = 100;
             fileTarget.Layout = FILE_LOG_LAYOUT;
 
             var loggingRule = new LoggingRule("*", LogLevel.Trace, fileTarget);
