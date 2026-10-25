@@ -153,8 +153,13 @@ namespace NzbDrone.Common.Instrumentation
             fileTarget.MaxArchiveFiles = maxArchiveFiles;
             fileTarget.EnableFileDelete = true;
 
-            // NLog 6 dropped rolling numbering; its default suffix is "_00", but the
-            // Logs page only serves names matching [-.a-zA-Z0-9]+.txt. Keep readarr.N.txt.
+            // NLog 6 no longer renames the active file on archive; it rolls on to
+            // readarr.1.txt, readarr.2.txt and leaves readarr.txt stale. Setting
+            // ArchiveFileName to the same path restores the File.Move behaviour, so
+            // readarr.txt stays the live log. The suffix keeps archives named
+            // readarr.N.txt: the Logs page only serves [-.a-zA-Z0-9]+.txt, and NLog 6's
+            // default "_00" suffix has an underscore.
+            fileTarget.ArchiveFileName = fileTarget.FileName;
             fileTarget.ArchiveSuffixFormat = ".{0}";
             fileTarget.Layout = FILE_LOG_LAYOUT;
 
