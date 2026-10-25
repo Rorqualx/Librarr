@@ -152,6 +152,7 @@ namespace NzbDrone.Common.Instrumentation
             fileTarget.ArchiveAboveSize = 1024000;
             fileTarget.MaxArchiveFiles = maxArchiveFiles;
             fileTarget.EnableFileDelete = true;
+
             // NLog 6 dropped rolling numbering; its default suffix is "_00", but the
             // Logs page only serves names matching [-.a-zA-Z0-9]+.txt. Keep readarr.N.txt.
             fileTarget.ArchiveSuffixFormat = ".{0}";
