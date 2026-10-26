@@ -17,7 +17,7 @@ namespace Readarr.Api.V1.Logs
         public LogFileController(IAppFolderInfo appFolderInfo,
                              IDiskProvider diskProvider,
                              IConfigFileProvider configFileProvider)
-            : base(diskProvider, configFileProvider, "")
+            : base(diskProvider, configFileProvider, "log/file")
         {
             _appFolderInfo = appFolderInfo;
             _diskProvider = diskProvider;

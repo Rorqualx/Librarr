@@ -46,7 +46,10 @@ on:
         required: true
 
 env:
-  DOTNET_VERSION: '10.0.x'
+  # Pinned 2026-10-25: 10.0.x resolved to 10.0.403, whose files returned
+  # HTTP 409 from Microsoft's origin while the release metadata still listed
+  # 10.0.402. Go back to '10.0.x' once 10.0.403 (or later) downloads.
+  DOTNET_VERSION: '10.0.402'
   # See the note in build.yml — Node 20 is EOL, 24 is LTS until 2028-04-30.
   NODE_VERSION: '24.x'
 
