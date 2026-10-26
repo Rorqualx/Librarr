@@ -17,3 +17,6 @@ NzbDrone.Api.Test.Config.MediaManagementConfigValidationFixture >=3
 # Issue #101: qBittorrent 5.2+ rejected the Basic credential sent on every
 # request and could return an empty login body; API key auth was missing.
 NzbDrone.Core.Test.Download.DownloadClientTests.QBittorrentTests.QBittorrentProxyV2Fixture >=13
+
+# contentsUrl for log files was /api/v1//<file> (404) instead of /api/v1/log/file/<file>.
+NzbDrone.Api.Test.Logs.LogFileControllerFixture >=4
