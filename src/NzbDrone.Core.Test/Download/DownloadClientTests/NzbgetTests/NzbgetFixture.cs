@@ -352,13 +352,13 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.NzbgetTests
         }
 
         [Test]
-        public void Download_should_throw_if_failed()
+        public async Task Download_should_throw_if_failed()
         {
             GivenFailedDownload();
 
             var remoteBook = CreateRemoteBook();
 
-            Assert.ThrowsAsync<DownloadClientRejectedReleaseException>(async () => await Subject.Download(remoteBook, CreateIndexer()));
+            await Assert.ThrowsAsync<DownloadClientRejectedReleaseException>(async () => await Subject.Download(remoteBook, CreateIndexer()));
         }
 
         [Test]

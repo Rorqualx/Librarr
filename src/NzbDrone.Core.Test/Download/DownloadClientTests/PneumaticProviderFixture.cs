@@ -78,20 +78,20 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests
         }
 
         [Test]
-        public void should_throw_on_failed_download()
+        public async Task should_throw_on_failed_download()
         {
             WithFailedDownload();
 
-            Assert.ThrowsAsync<WebException>(async () => await Subject.Download(_remoteBook, _indexer));
+            await Assert.ThrowsAsync<WebException>(async () => await Subject.Download(_remoteBook, _indexer));
         }
 
         [Test]
-        public void should_throw_if_discography_download()
+        public async Task should_throw_if_discography_download()
         {
             _remoteBook.Release.Title = "Alien Ant Farm - Discography";
             _remoteBook.ParsedBookInfo.Discography = true;
 
-            Assert.ThrowsAsync<NotSupportedException>(async () => await Subject.Download(_remoteBook, _indexer));
+            await Assert.ThrowsAsync<NotSupportedException>(async () => await Subject.Download(_remoteBook, _indexer));
         }
 
         [Test]

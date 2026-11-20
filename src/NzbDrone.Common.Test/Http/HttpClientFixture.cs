@@ -141,13 +141,13 @@ namespace NzbDrone.Common.Test.Http
         }
 
         [Test]
-        public void should_throw_timeout_request()
+        public async Task should_throw_timeout_request()
         {
             var request = new HttpRequest($"https://{_httpBinHost}/delay/10");
 
             request.RequestTimeout = new TimeSpan(0, 0, 5);
 
-            Assert.ThrowsAsync<WebException>(async () => await Subject.ExecuteAsync(request));
+            await Assert.ThrowsAsync<WebException>(async () => await Subject.ExecuteAsync(request));
         }
 
         [Test]
@@ -162,12 +162,12 @@ namespace NzbDrone.Common.Test.Http
 
         [TestCase(CertificateValidationType.Enabled)]
         [TestCase(CertificateValidationType.DisabledForLocalAddresses)]
-        public void bad_ssl_should_fail_when_remote_validation_enabled(CertificateValidationType validationType)
+        public async Task bad_ssl_should_fail_when_remote_validation_enabled(CertificateValidationType validationType)
         {
             Mocker.GetMock<IConfigService>().SetupGet(x => x.CertificateValidation).Returns(validationType);
             var request = new HttpRequest($"https://expired.badssl.com");
 
-            Assert.ThrowsAsync<HttpRequestException>(async () => await Subject.ExecuteAsync(request));
+            await Assert.ThrowsAsync<HttpRequestException>(async () => await Subject.ExecuteAsync(request));
             ExceptionVerification.ExpectedErrors(1);
         }
 
@@ -251,11 +251,11 @@ namespace NzbDrone.Common.Test.Http
         [TestCase(HttpStatusCode.InternalServerError)]
         [TestCase(HttpStatusCode.ServiceUnavailable)]
         [TestCase(HttpStatusCode.BadGateway)]
-        public void should_throw_on_unsuccessful_status_codes(int statusCode)
+        public async Task should_throw_on_unsuccessful_status_codes(int statusCode)
         {
             var request = new HttpRequest($"https://{_httpBinHost}/status/{statusCode}");
 
-            var exception = Assert.ThrowsAsync<HttpException>(async () => await Subject.GetAsync<HttpBinResource>(request));
+            var exception = await Assert.ThrowsAsync<HttpException>(async () => await Subject.GetAsync<HttpBinResource>(request));
 
             ((int)exception.Response.StatusCode).Should().Be(statusCode);
 
@@ -263,33 +263,33 @@ namespace NzbDrone.Common.Test.Http
         }
 
         [Test]
-        public void should_not_throw_on_suppressed_status_codes()
+        public async Task should_not_throw_on_suppressed_status_codes()
         {
             var request = new HttpRequest($"https://{_httpBinHost}/status/{HttpStatusCode.NotFound}");
             request.SuppressHttpErrorStatusCodes = new[] { HttpStatusCode.NotFound };
 
-            Assert.ThrowsAsync<HttpException>(async () => await Subject.GetAsync<HttpBinResource>(request));
+            await Assert.ThrowsAsync<HttpException>(async () => await Subject.GetAsync<HttpBinResource>(request));
 
             ExceptionVerification.IgnoreWarns();
         }
 
         [Test]
-        public void should_log_unsuccessful_status_codes()
+        public async Task should_log_unsuccessful_status_codes()
         {
             var request = new HttpRequest($"https://{_httpBinHost}/status/{HttpStatusCode.NotFound}");
 
-            var exception = Assert.ThrowsAsync<HttpException>(async () => await Subject.GetAsync<HttpBinResource>(request));
+            var exception = await Assert.ThrowsAsync<HttpException>(async () => await Subject.GetAsync<HttpBinResource>(request));
 
             ExceptionVerification.ExpectedWarns(1);
         }
 
         [Test]
-        public void should_not_log_unsuccessful_status_codes()
+        public async Task should_not_log_unsuccessful_status_codes()
         {
             var request = new HttpRequest($"https://{_httpBinHost}/status/{HttpStatusCode.NotFound}");
             request.LogHttpError = false;
 
-            Assert.ThrowsAsync<HttpException>(async () => await Subject.GetAsync<HttpBinResource>(request));
+            await Assert.ThrowsAsync<HttpException>(async () => await Subject.GetAsync<HttpBinResource>(request));
 
             ExceptionVerification.ExpectedWarns(0);
         }
@@ -347,12 +347,12 @@ namespace NzbDrone.Common.Test.Http
         }
 
         [Test]
-        public void should_throw_on_too_many_redirects()
+        public async Task should_throw_on_too_many_redirects()
         {
             var request = new HttpRequest($"https://{_httpBinHost}/redirect/6");
             request.AllowAutoRedirect = true;
 
-            Assert.ThrowsAsync<WebException>(async () => await Subject.GetAsync(request));
+            await Assert.ThrowsAsync<WebException>(async () => await Subject.GetAsync(request));
 
             ExceptionVerification.ExpectedErrors(0);
         }
@@ -415,11 +415,11 @@ namespace NzbDrone.Common.Test.Http
         }
 
         [Test]
-        public void should_not_download_file_with_error()
+        public async Task should_not_download_file_with_error()
         {
             var file = GetTempFilePath();
 
-            Assert.ThrowsAsync<HttpException>(async () => await Subject.DownloadFileAsync("https://download.sonarr.tv/wrongpath", file));
+            await Assert.ThrowsAsync<HttpException>(async () => await Subject.DownloadFileAsync("https://download.sonarr.tv/wrongpath", file));
 
             File.Exists(file).Should().BeFalse();
 
@@ -773,11 +773,11 @@ namespace NzbDrone.Common.Test.Http
         }
 
         [Test]
-        public void should_throw_on_http429_too_many_requests()
+        public async Task should_throw_on_http429_too_many_requests()
         {
             var request = new HttpRequest($"https://{_httpBinHost}/status/429");
 
-            Assert.ThrowsAsync<TooManyRequestsException>(async () => await Subject.GetAsync(request));
+            await Assert.ThrowsAsync<TooManyRequestsException>(async () => await Subject.GetAsync(request));
 
             ExceptionVerification.IgnoreWarns();
         }
