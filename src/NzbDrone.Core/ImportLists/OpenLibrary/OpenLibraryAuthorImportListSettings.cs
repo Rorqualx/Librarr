@@ -14,7 +14,7 @@ namespace NzbDrone.Core.ImportLists.OpenLibrary
 
     public class OpenLibraryAuthorImportListSettings : IImportListSettings
     {
-        private static readonly OpenLibraryAuthorImportListValidator Validator = new ();
+        private static readonly OpenLibraryAuthorImportListValidator Validator = new();
 
         public OpenLibraryAuthorImportListSettings()
         {

@@ -127,8 +127,8 @@ namespace NzbDrone.Core.Qualities
         // instead of taking the process down. QualityFormatFixture asserts
         // every member of All is classified here, so forgetting to classify a
         // new quality fails the test suite rather than shipping.
-        private static readonly HashSet<int> TextQualityIds = new () { 0, 1, 2, 3, 4 };
-        private static readonly HashSet<int> AudioQualityIds = new () { 10, 11, 12, 13 };
+        private static readonly HashSet<int> TextQualityIds = new() { 0, 1, 2, 3, 4 };
+        private static readonly HashSet<int> AudioQualityIds = new() { 10, 11, 12, 13 };
 
         public QualityFormat Format => FormatOf(Id);
 

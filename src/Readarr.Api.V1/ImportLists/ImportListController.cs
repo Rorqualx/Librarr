@@ -8,8 +8,8 @@ namespace Readarr.Api.V1.ImportLists
     [V1ApiController]
     public class ImportListController : ProviderControllerBase<ImportListResource, ImportListBulkResource, IImportList, ImportListDefinition>
     {
-        public static readonly ImportListResourceMapper ResourceMapper = new ();
-        public static readonly ImportListBulkResourceMapper BulkResourceMapper = new ();
+        public static readonly ImportListResourceMapper ResourceMapper = new();
+        public static readonly ImportListBulkResourceMapper BulkResourceMapper = new();
 
         public ImportListController(IImportListFactory importListFactory,
                                     QualityProfileExistsValidator qualityProfileExistsValidator,
