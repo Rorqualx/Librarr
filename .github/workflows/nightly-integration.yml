@@ -26,10 +26,7 @@ on:
         required: false
 
 env:
-  # Pinned 2026-10-25: 10.0.x resolved to 10.0.403, whose files returned
-  # HTTP 409 from Microsoft's origin while the release metadata still listed
-  # 10.0.402. Go back to '10.0.x' once 10.0.403 (or later) downloads.
-  DOTNET_VERSION: '10.0.402'
+  DOTNET_VERSION: '10.0.x'
   NODE_VERSION: '24.x'
 
 permissions:
