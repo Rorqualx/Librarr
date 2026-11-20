@@ -39,7 +39,7 @@ namespace NzbDrone.Core.RootFolders
         // author. Matched case-insensitively against the leaf directory name.
         // ".caltrash" is Calibre's recycle bin and shows up in Calibre-backed
         // root folders.
-        private static readonly HashSet<string> SpecialFolders = new (StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> SpecialFolders = new(StringComparer.OrdinalIgnoreCase)
         {
             "$recycle.bin",
             "system volume information",

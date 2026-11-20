@@ -73,7 +73,7 @@ namespace Readarr.Api.V1.Indexers
 
             if (decision?.RemoteBook.ParsedBookInfo == null)
             {
-                throw new ValidationException(new List<ValidationFailure> { new ("Title", "Unable to parse", release.Title) });
+                throw new ValidationException(new List<ValidationFailure> { new("Title", "Unable to parse", release.Title) });
             }
 
             return MapDecisions(new[] { decision }).First();

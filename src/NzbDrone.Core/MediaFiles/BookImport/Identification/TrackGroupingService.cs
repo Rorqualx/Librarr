@@ -21,9 +21,9 @@ namespace NzbDrone.Core.MediaFiles.BookImport.Identification
     {
         private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(TrackGroupingService));
 
-        private static readonly List<string> MultiDiscMarkers = new () { @"dis[ck]", @"cd" };
+        private static readonly List<string> MultiDiscMarkers = new() { @"dis[ck]", @"cd" };
         private static readonly string MultiDiscPatternFormat = @"^(?<root>.*%s[\W_]*)\d";
-        private static readonly List<string> VariousAuthorTitles = new () { "", "various authors", "various", "va", "unknown" };
+        private static readonly List<string> VariousAuthorTitles = new() { "", "various authors", "various", "va", "unknown" };
 
         public List<LocalEdition> GroupTracks(List<LocalBook> localTracks)
         {

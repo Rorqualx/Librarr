@@ -51,6 +51,25 @@ dotnet_diagnostic.IDE0018.severity = error
 
 # Stylecop Rules
 dotnet_diagnostic.SA0001.severity = none
+# The keyword 'new' should be followed by a space.
+#
+# This rule and `dotnet format whitespace` gave directly opposite orders
+# for target-typed `new()`, so the two checks could not both be satisfied:
+# the formatter rewrites `new ()` to `new()`, and SA1000 then failed the
+# build demanding the space back. The pre-commit hook format-checks whole
+# files, so it rejected any commit touching one of the 45 files containing
+# `new ()` -- and its advice (run `dotnet format whitespace`) was the step
+# that created the violation. Commits were landing with SKIP_FORMAT_CHECK=1.
+#
+# StyleCop.Analyzers 1.1.118 predates C# 9 target-typed new, so SA1000 here
+# assumes `new` is always followed by a type. 1.3.180 reverses the rule to
+# agree with the formatter, but bumping to it surfaces eight further rule
+# families that do not fire at 1.1.118 (SA1017, SA1117, SA1121, SA1143,
+# SA1315, SA1407, SA1414, SA1504) and the list had not converged -- that is
+# its own change, not collateral on a tooling fix. Every `new (`/`new ()` in
+# src is now `new()`, which is what the formatter produces, so this is off
+# until the analyzer moves.
+dotnet_diagnostic.SA1000.severity = none
 dotnet_diagnostic.SA1005.severity = none
 dotnet_diagnostic.SA1025.severity = none
 dotnet_diagnostic.SA1101.severity = none

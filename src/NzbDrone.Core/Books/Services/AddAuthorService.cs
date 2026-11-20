@@ -184,7 +184,7 @@ namespace NzbDrone.Core.Books
 
                 throw new ValidationException(new List<ValidationFailure>
                 {
-                    new ("ForeignAuthorId", "An author with this ID was not found", newAuthor.Metadata.Value.ForeignAuthorId)
+                    new("ForeignAuthorId", "An author with this ID was not found", newAuthor.Metadata.Value.ForeignAuthorId)
                 });
             }
 

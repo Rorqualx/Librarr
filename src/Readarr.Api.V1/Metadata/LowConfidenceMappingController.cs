@@ -172,7 +172,7 @@ namespace Readarr.Api.V1.Metadata
         {
             var name = char.ToLowerInvariant(propertyName[0]) + propertyName.Substring(1);
 
-            return new ValidationException(new List<ValidationFailure> { new (name, message, attemptedValue) });
+            return new ValidationException(new List<ValidationFailure> { new(name, message, attemptedValue) });
         }
 
         private List<LowConfidenceMappingResource> Decorate(List<BookIdMapping> mappings)
