@@ -82,12 +82,29 @@ def playwright_suite(workflow):
     return excluded_categories(step), problems
 
 
+def network_suite(workflow):
+    step = step_block(workflow, "Run integration-category tests")
+    problems = []
+
+    if step is None or "./test.sh Linux Integration Test" not in step:
+        problems.append("build.yml: the 'Run integration-category tests' step no longer runs ./test.sh Linux Integration Test")
+
+    with open(TEST_SH, encoding="utf-8") as f:
+        # LINUX is only excluded on the Windows leg. Integration ADDS
+        # Category=IntegrationTest rather than excluding it, so the
+        # exclusions that matter are the shared ones.
+        excluded = excluded_categories(f.read()) - {"LINUX", "IntegrationTest", "AutomationTest"}
+
+    return excluded, problems
+
+
 # Each list, the CI step that must run its tests, and the result file the
 # check reads. A list missing here is an error, so a new list cannot be
 # added without saying where it runs.
 SUITES = {
     "unit.txt": (unit_suite, "TestResult.xml"),
     "playwright.txt": (playwright_suite, "PlaywrightResult.xml"),
+    "network.txt": (network_suite, "TestResult.xml"),
 }
 
 

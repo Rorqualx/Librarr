@@ -1,0 +1,25 @@
+# Regression tests the "Integration tests (network)" job must run AND pass.
+# Same format and checks as unit.txt.
+#
+# This list exists because that job reported GREEN having executed ONE test.
+# HttpClientFixture's [OneTimeSetUp] calls Assert.Inconclusive when
+# httpbin1.servarr.com is unreachable, which self-skips all 54 and leaves the
+# leg passing -- and those 54 are the job's entire reason for existing. The
+# workflow comment says what that costs: they "had never executed in CI, which
+# is how one of them sat three weeks past a hard-coded cookie expiry without
+# anyone noticing."
+#
+# A (passed + failed) > 0 guard does NOT catch it: on the run that exposed
+# this, one unrelated Mono test passed, which satisfies it.
+#
+# Named without its type argument even though NUnit reports the cases as
+# HttpClientFixture<ManagedHttpDispatcher>.*, because that is the form
+# check_required_tests_wired.py can resolve against the source. assert_tests_ran
+# matches the generic form.
+#
+# 54 is what this job discovers and passes on ubuntu (the only place it runs).
+# It fails if the cases are skipped (host unreachable -> not "Passed") or if
+# they stop being discovered at all (found < 54). The macOS-only
+# [Platform(Exclude = "MacOsX")] on should_execute_get_using_brotli makes a
+# local run 53/54, which is why this is a CI-only assertion.
+NzbDrone.Common.Test.Http.HttpClientFixture >=54

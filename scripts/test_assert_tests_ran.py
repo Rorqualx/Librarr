@@ -80,6 +80,24 @@ class CheckTests(unittest.TestCase):
 
         self.assertEqual(check(xml, [(FIXTURE + ".method", 1)]), [])
 
+    def test_matches_a_generic_fixture_without_its_type_argument(self):
+        # NUnit reports HttpClientFixture<ManagedHttpDispatcher>.x, but the
+        # entry names the fixture as source declares it, with no type argument.
+        xml = results(("Ns.HttpClientFixture<ManagedHttpDispatcher>.a", "Passed", None))
+
+        self.assertEqual(check(xml, [("Ns.HttpClientFixture", 1)]), [])
+
+    def test_a_generic_prefix_does_not_match_a_longer_name(self):
+        xml = results(("Ns.HttpClientFixtureOld<D>.a", "Passed", None))
+
+        self.assertEqual(len(check(xml, [("Ns.HttpClientFixture", 1)])), 1)
+
+    def test_a_skipped_generic_case_fails(self):
+        # The httpbin host being unreachable self-skips the whole fixture.
+        xml = results(("Ns.HttpClientFixture<ManagedHttpDispatcher>.a", "Skipped", "Inconclusive"))
+
+        self.assertEqual(len(check(xml, [("Ns.HttpClientFixture", 1)])), 1)
+
     def test_a_prefix_does_not_match_a_longer_name(self):
         # "UrlBaseTest" must not be satisfied by "UrlBaseTestOld".
         xml = results(("Ns.UrlBaseTestOld.a", "Passed", None))
