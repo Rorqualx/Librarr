@@ -10,7 +10,7 @@ namespace NzbDrone.Integration.Test
     {
         private RestRequest BuildGet(string route = "author")
         {
-            var request = new RestRequest(route, Method.GET);
+            var request = new RestRequest(route, Method.Get);
             request.AddHeader("Origin", "http://a.different.domain");
             request.AddHeader(AccessControlHeaders.RequestMethod, "POST");
 
@@ -19,7 +19,7 @@ namespace NzbDrone.Integration.Test
 
         private RestRequest BuildOptions(string route = "author")
         {
-            var request = new RestRequest(route, Method.OPTIONS);
+            var request = new RestRequest(route, Method.Options);
             request.AddHeader("Origin", "http://a.different.domain");
             request.AddHeader(AccessControlHeaders.RequestMethod, "POST");
 
