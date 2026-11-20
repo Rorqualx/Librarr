@@ -101,7 +101,7 @@ namespace NzbDrone.Test.Common
                     TestContext.Progress.WriteLine("Readarr has exited unexpectedly");
                     Thread.Sleep(2000);
                     var output = _startupLog.Join(Environment.NewLine);
-                    Assert.Fail("Process has exited: ExitCode={0} Output={1}", _nzbDroneProcess.ExitCode, output);
+                    Assert.Fail($"Process has exited: ExitCode={_nzbDroneProcess.ExitCode} Output={output}");
                 }
 
                 var request = new RestRequest("system/status");
