@@ -35,10 +35,7 @@ on:
 env:
   # Keep in sync with azure-pipelines.yml:28 (`dotnetVersion`) and
   # global.json until that file is removed.
-  # Pinned 2026-10-25: 10.0.x resolved to 10.0.403, whose files returned
-  # HTTP 409 from Microsoft's origin while the release metadata still listed
-  # 10.0.402. Go back to '10.0.x' once 10.0.403 (or later) downloads.
-  DOTNET_VERSION: '10.0.402'
+  DOTNET_VERSION: '10.0.x'
   # Node 20 went EOL 2026-04-30. 24 is the current LTS (until 2028-04-30),
   # which outlives the .NET 10 support window this repo is pinned to.
   # Keep in sync with .nvmrc, package.json `engines`/`volta`, and
