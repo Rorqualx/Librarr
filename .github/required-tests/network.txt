@@ -1,5 +1,14 @@
 # Regression tests the "Integration tests (network)" job must run AND pass.
-# Same format and checks as unit.txt.
+# Same entry format as unit.txt, but this list is read TWICE, split by blame:
+#
+#   --discovered-only  -> the "Network tests discovered" job, which BLOCKS.
+#                         Were the 54 collected and run at all?
+#   --passed-only      -> a step inside the network job, which does NOT
+#                         block. Did they pass?
+#
+# Only the first question has an answer we are responsible for. The second
+# goes red when httpbin1.servarr.com has a bad day, and a check that reddens
+# for reasons the committer cannot fix is one people learn to ignore.
 #
 # This list exists because that job reported GREEN having executed ONE test.
 # HttpClientFixture's [OneTimeSetUp] calls Assert.Inconclusive when
@@ -18,8 +27,10 @@
 # matches the generic form.
 #
 # 54 is what this job discovers and passes on ubuntu (the only place it runs).
-# It fails if the cases are skipped (host unreachable -> not "Passed") or if
-# they stop being discovered at all (found < 54). The macOS-only
+# An unreachable host is what proves the split sits in the right place: NUnit
+# still reports all 54 as test-cases, so only the --passed-only half reddens.
+# A fixture renamed, filtered out or never collected shows up as "found 0",
+# and that is the half that blocks. The macOS-only
 # [Platform(Exclude = "MacOsX")] on should_execute_get_using_brotli makes a
 # local run 53/54, which is why this is a CI-only assertion.
 NzbDrone.Common.Test.Http.HttpClientFixture >=54

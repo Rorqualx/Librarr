@@ -7,7 +7,7 @@ rename a fixture or mark it [Ignore], and the step stays green while the
 test it was there for quietly stops existing. This reads the result file
 afterwards and checks the tests that matter are actually in it.
 
-Usage: assert_tests_ran.py RESULTS_XML REQUIRED_LIST
+Usage: assert_tests_ran.py [--discovered-only|--passed-only] RESULTS_XML REQUIRED_LIST
 
 REQUIRED_LIST has one entry per line; blank lines and `#` comments are
 ignored. An entry is a test's full name, or a prefix of it -- a fixture or
@@ -19,10 +19,31 @@ a parameterised method -- and matches every test-case under it:
 Each entry must match at least one test-case (or at least N with `>=N`),
 and every test-case it matches must have passed. Skipped, Ignored and
 Inconclusive all count as not having run.
+
+Those are two findings with different culprits, and a suite whose tests
+reach a third party needs them judged separately:
+
+    --discovered-only   only the count clause: the tests were collected and
+                        run at all. Nobody else's server can change that, so
+                        a failure here is our own wiring -- safe to block a
+                        merge on.
+    --passed-only       only the outcome clause. This is what reddens when
+                        someone else's host is down, so a leg that talks to
+                        one should report it without blocking.
+
+With neither flag both clauses are checked, which is what a suite that
+touches nothing external should do.
 """
 
 import sys
 import xml.etree.ElementTree as ET
+
+# (discovered, passed) -> (what a green run proved, what a red one did not)
+CLAUSES = {
+    (True, True): ("discovered and passed", "did not run and pass"),
+    (True, False): ("discovered", "were not discovered"),
+    (False, True): ("passed", "did not pass"),
+}
 
 
 def parse_required(text):
@@ -60,7 +81,20 @@ def matches(entry, fullname):
             or fullname.startswith(entry + "<"))
 
 
-def check(results_xml, required):
+def collected(results_xml, required):
+    """How many test-cases the list matched in total.
+
+    Reported on every green run, because --passed-only on its own cannot
+    fail an entry that matched nothing -- that is --discovered-only's to
+    report -- and "passed" over zero cases is the exact kind of hollow
+    green this script exists to make visible.
+    """
+    names = [c.get("fullname", "") for c in ET.fromstring(results_xml).iter("test-case")]
+
+    return sum(1 for name in names for entry, _ in required if matches(entry, name))
+
+
+def check(results_xml, required, discovered=True, passed=True):
     root = ET.fromstring(results_xml)
     cases = [(c.get("fullname", ""), c.get("result", ""), c.get("label", "")) for c in root.iter("test-case")]
     problems = []
@@ -68,8 +102,11 @@ def check(results_xml, required):
     for entry, minimum in required:
         found = [c for c in cases if matches(entry, c[0])]
 
-        if len(found) < minimum:
+        if discovered and len(found) < minimum:
             problems.append("{0}: expected at least {1} test case(s), found {2}".format(entry, minimum, len(found)))
+
+        if not passed:
+            continue
 
         for fullname, result, label in found:
             if result != "Passed":
@@ -79,32 +116,54 @@ def check(results_xml, required):
 
 
 def main(argv):
-    if len(argv) != 3:
+    args = argv[1:]
+    discovered = passed = True
+
+    while args and args[0].startswith("--"):
+        flag = args.pop(0)
+
+        if flag == "--discovered-only":
+            passed = False
+        elif flag == "--passed-only":
+            discovered = False
+        else:
+            sys.stderr.write("unknown option: {0}\n\n".format(flag))
+            sys.stderr.write(__doc__)
+            return 2
+
+    # Neither clause left is a no-op check that would report green having
+    # verified nothing, which is the exact failure this script exists to
+    # catch -- so it is an argument error, not an empty pass.
+    if len(args) != 2 or not (discovered or passed):
         sys.stderr.write(__doc__)
         return 2
 
+    results_path, required_path = args
+    proved, failed = CLAUSES[(discovered, passed)]
+
     try:
-        with open(argv[1], encoding="utf-8") as f:
+        with open(results_path, encoding="utf-8") as f:
             results_xml = f.read()
     except OSError as e:
-        print("::error::No test results at {0} ({1}), so nothing proves the required tests ran.".format(argv[1], e.strerror))
+        print("::error::No test results at {0} ({1}), so nothing proves the required tests ran.".format(results_path, e.strerror))
         return 1
 
-    with open(argv[2], encoding="utf-8") as f:
+    with open(required_path, encoding="utf-8") as f:
         required = parse_required(f.read())
 
-    problems = check(results_xml, required)
+    problems = check(results_xml, required, discovered, passed)
 
     if problems:
-        print("::error::Required tests from {0} did not run and pass:".format(argv[2]))
+        print("::error::Required tests from {0} {1}:".format(required_path, failed))
 
         for problem in problems:
             print("  " + problem)
 
         return 1
 
-    print("All {0} required test entr{1} from {2} ran and passed.".format(
-        len(required), "y" if len(required) == 1 else "ies", argv[2]))
+    print("{0}: {1} required entr{2} {3} ({4} test case(s)).".format(
+        required_path, len(required), "y" if len(required) == 1 else "ies",
+        proved, collected(results_xml, required)))
 
     return 0
 

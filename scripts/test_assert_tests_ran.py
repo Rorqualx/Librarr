@@ -5,6 +5,7 @@ CI runs these before trusting the checker, because a checker that passes
 everything looks exactly like a healthy suite.
 """
 
+import io
 import os
 import sys
 import tempfile
@@ -12,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from assert_tests_ran import check, main, parse_required  # noqa: E402
+from assert_tests_ran import check, collected, main, parse_required  # noqa: E402
 
 
 def results(*cases):
@@ -105,8 +106,53 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(len(check(xml, [("Ns.UrlBaseTest", 1)])), 1)
 
 
+class CollectedTests(unittest.TestCase):
+    def test_counts_every_matched_case(self):
+        xml = results((FIXTURE + ".a", "Passed", None),
+                      (FIXTURE + ".b", "Inconclusive", "Inconclusive"),
+                      ("Other.Fixture.c", "Passed", None))
+
+        self.assertEqual(collected(xml, [(FIXTURE, 1)]), 2)
+
+    def test_counts_nothing_when_nothing_matched(self):
+        self.assertEqual(collected(results(), [(FIXTURE, 54)]), 0)
+
+
+class ClauseTests(unittest.TestCase):
+    """--discovered-only and --passed-only split `check` by whose fault it is.
+
+    The case that matters is the network leg: when its third-party host is
+    unreachable the fixture's [OneTimeSetUp] calls Assert.Inconclusive, and
+    NUnit still reports every case -- discovered, not passed. That has to
+    leave the blocking half green and the non-blocking half red.
+    """
+
+    SKIPPED = results((FIXTURE + ".a", "Inconclusive", "Inconclusive"))
+
+    def test_discovered_only_passes_a_case_that_ran_but_did_not_pass(self):
+        self.assertEqual(check(self.SKIPPED, [(FIXTURE, 1)], passed=False), [])
+
+    def test_discovered_only_still_fails_when_nothing_was_collected(self):
+        problems = check(results(), [(FIXTURE, 1)], passed=False)
+
+        self.assertEqual(len(problems), 1)
+        self.assertIn("found 0", problems[0])
+
+    def test_passed_only_fails_a_case_that_ran_but_did_not_pass(self):
+        self.assertEqual(len(check(self.SKIPPED, [(FIXTURE, 1)], discovered=False)), 1)
+
+    def test_passed_only_ignores_a_fixture_that_was_never_collected(self):
+        # Not this clause's blame to report -- --discovered-only owns it,
+        # and that is the half that blocks.
+        self.assertEqual(check(results(), [(FIXTURE, 54)], discovered=False), [])
+
+    def test_the_default_checks_both(self):
+        self.assertEqual(len(check(results(), [(FIXTURE, 1)])), 1)
+        self.assertEqual(len(check(self.SKIPPED, [(FIXTURE, 1)])), 1)
+
+
 class MainTests(unittest.TestCase):
-    def run_main(self, xml):
+    def run_main(self, xml, *flags):
         with tempfile.TemporaryDirectory() as folder:
             required = os.path.join(folder, "required.txt")
 
@@ -121,11 +167,38 @@ class MainTests(unittest.TestCase):
 
             with open(os.devnull, "w") as devnull:
                 stdout, sys.stdout = sys.stdout, devnull
+                stderr, sys.stderr = sys.stderr, devnull
 
                 try:
-                    return main(["assert_tests_ran.py", path, required])
+                    return main(["assert_tests_ran.py"] + list(flags) + [path, required])
                 finally:
-                    sys.stdout = stdout
+                    sys.stdout, sys.stderr = stdout, stderr
+
+    def output(self, xml, *flags):
+        """run_main, but returning what it printed."""
+        captured = io.StringIO()
+        stdout, sys.stdout = sys.stdout, captured
+
+        try:
+            self.run_main_into(xml, flags)
+        finally:
+            sys.stdout = stdout
+
+        return captured.getvalue()
+
+    def run_main_into(self, xml, flags):
+        with tempfile.TemporaryDirectory() as folder:
+            required = os.path.join(folder, "required.txt")
+
+            with open(required, "w") as f:
+                f.write(FIXTURE + "\n")
+
+            path = os.path.join(folder, "TestResult.xml")
+
+            with open(path, "w") as f:
+                f.write(xml)
+
+            return main(["assert_tests_ran.py"] + list(flags) + [path, required])
 
     def test_exits_zero_when_satisfied(self):
         self.assertEqual(self.run_main(results((FIXTURE + ".a", "Passed", None))), 0)
@@ -136,6 +209,32 @@ class MainTests(unittest.TestCase):
     def test_a_missing_results_file_fails_rather_than_passing(self):
         # No file means nothing ran -- e.g. the test step died early.
         self.assertEqual(self.run_main(None), 1)
+
+    def test_a_missing_results_file_fails_under_either_clause(self):
+        # Neither clause can be judged from a file that is not there, so
+        # both report it rather than the blocking one quietly passing.
+        self.assertEqual(self.run_main(None, "--discovered-only"), 1)
+        self.assertEqual(self.run_main(None, "--passed-only"), 1)
+
+    def test_a_green_run_says_how_many_cases_it_judged(self):
+        # --passed-only cannot fail an entry that matched nothing, so the
+        # count is the only thing on a green run that distinguishes "the 54
+        # passed" from "nothing ran and nothing therefore failed".
+        self.assertIn("(0 test case(s))", self.output(results(), "--passed-only"))
+        self.assertIn(
+            "(2 test case(s))",
+            self.output(results((FIXTURE + ".a", "Passed", None),
+                                (FIXTURE + ".b", "Passed", None))))
+
+    def test_an_unknown_option_is_an_argument_error(self):
+        self.assertEqual(self.run_main(results(), "--discovered"), 2)
+
+    def test_asking_for_neither_clause_is_an_argument_error(self):
+        # Would otherwise check nothing and report green doing it.
+        self.assertEqual(
+            self.run_main(results((FIXTURE + ".a", "Passed", None)),
+                          "--discovered-only", "--passed-only"),
+            2)
 
 
 if __name__ == "__main__":
