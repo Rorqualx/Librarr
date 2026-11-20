@@ -72,7 +72,7 @@ namespace NzbDrone.Playwright.Test
 
             Directory.CreateDirectory(author.Value<string>("path"));
 
-            var post = new RestRequest("author", Method.POST);
+            var post = new RestRequest("author", Method.Post);
             post.AddHeader("X-Api-Key", apiKey);
             post.AddParameter("application/json", author.ToString(), ParameterType.RequestBody);
 
@@ -151,7 +151,7 @@ namespace NzbDrone.Playwright.Test
                 ["isCalibreLibrary"] = false
             };
 
-            var request = new RestRequest("rootfolder", Method.POST);
+            var request = new RestRequest("rootfolder", Method.Post);
             request.AddHeader("X-Api-Key", apiKey);
             request.AddParameter("application/json", body.ToString(), ParameterType.RequestBody);
 

@@ -5,6 +5,7 @@ using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Integration.Test.Client;
 using Readarr.Api.V1.Books;
+using RestSharp;
 
 namespace NzbDrone.Integration.Test.ApiTests
 {
@@ -55,12 +56,12 @@ namespace NzbDrone.Integration.Test.ApiTests
         private List<BookResource> GetCalendar(DateTime start, DateTime end, int authorId, string unmonitored = null)
         {
             var request = Calendar.BuildRequest();
-            request.AddParameter("start", start.ToString("s") + "Z");
-            request.AddParameter("end", end.ToString("s") + "Z");
+            request.AddQueryParameter("start", start.ToString("s") + "Z");
+            request.AddQueryParameter("end", end.ToString("s") + "Z");
 
             if (unmonitored != null)
             {
-                request.AddParameter("unmonitored", unmonitored);
+                request.AddQueryParameter("unmonitored", unmonitored);
             }
 
             return Calendar.Get<List<BookResource>>(request)

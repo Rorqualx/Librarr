@@ -108,7 +108,13 @@ namespace NzbDrone.Test.Common
                 request.AddHeader("Authorization", ApiKey);
                 request.AddHeader("X-Api-Key", ApiKey);
 
-                var statusCall = _restClient.Get(request);
+                // Execute, not Get: RestSharp 107+ made the verb helpers
+                // (Get/Post/...) call ThrowIfError, so a connection refused
+                // -- the normal state while the app is still booting --
+                // throws out of this loop instead of coming back as a
+                // response to retry on. Execute still returns the failed
+                // response, which is what this loop is written against.
+                var statusCall = _restClient.Execute(request);
 
                 if (statusCall.ResponseStatus == ResponseStatus.Completed)
                 {
@@ -117,7 +123,7 @@ namespace NzbDrone.Test.Common
                     return;
                 }
 
-                TestContext.Progress.WriteLine("Waiting for Readarr to start. Response Status : {0}  [{1}] {2}", statusCall.ResponseStatus, statusCall.StatusDescription, statusCall.ErrorException.Message);
+                TestContext.Progress.WriteLine("Waiting for Readarr to start. Response Status : {0}  [{1}] {2}", statusCall.ResponseStatus, statusCall.StatusDescription, statusCall.ErrorException?.Message);
 
                 Thread.Sleep(500);
             }
