@@ -14,7 +14,7 @@ namespace NzbDrone.Core.Books.Calibre
         private static readonly Dictionary<string, string> NameMap;
 
         // generated from https://www.loc.gov/standards/iso639-2/ISO-639-2_utf-8.txt
-        public static readonly Dictionary<string, string> BtoTmap = new ()
+        public static readonly Dictionary<string, string> BtoTmap = new()
         {
             { "alb", "sqi" },
             { "arm", "hye" },

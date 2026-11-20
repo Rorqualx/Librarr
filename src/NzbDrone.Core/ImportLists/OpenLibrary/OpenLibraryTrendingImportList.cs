@@ -21,7 +21,7 @@ namespace NzbDrone.Core.ImportLists.OpenLibrary
     // canonical work resource).
     public class OpenLibraryTrendingImportList : ImportListBase<OpenLibraryTrendingImportListSettings>
     {
-        private static readonly HashSet<string> ValidPeriods = new (StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> ValidPeriods = new(StringComparer.OrdinalIgnoreCase)
         {
             "now",
             "daily",

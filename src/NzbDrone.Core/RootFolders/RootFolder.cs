@@ -19,7 +19,7 @@ namespace NzbDrone.Core.RootFolders
         public int DefaultAudiobookQualityProfileId { get; set; }
         public MonitorTypes DefaultMonitorOption { get; set; }
         public NewItemMonitorTypes DefaultNewItemMonitorOption { get; set; }
-        public HashSet<int> DefaultTags { get; set; } = new ();
+        public HashSet<int> DefaultTags { get; set; } = new();
         public bool IsCalibreLibrary { get; set; }
         public CalibreSettings CalibreSettings { get; set; }
 
@@ -29,6 +29,6 @@ namespace NzbDrone.Core.RootFolders
 
         // Not persisted — recomputed from disk on each read. See
         // RootFolderService.GetUnmappedFolders.
-        public List<UnmappedFolder> UnmappedFolders { get; set; } = new ();
+        public List<UnmappedFolder> UnmappedFolders { get; set; } = new();
     }
 }
