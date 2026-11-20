@@ -10,6 +10,7 @@ well under a second:
   - it, or its fixture, is marked [Ignore] or [Explicit]
   - it carries a category its CI step filters out
   - the CI step no longer un-gates the suite or no longer runs the check
+  - the blocking half of a check split by blame stopped blocking
   - a list exists that no CI step reads
 
 Exit 0 when all is well, 1 with one line per problem otherwise.
@@ -31,6 +32,36 @@ from assert_tests_ran import parse_required  # noqa: E402
 
 TEST_ATTRIBUTE = re.compile(r"\[\s*(Test|TestCase|TestCaseSource)\b")
 DISABLED_ATTRIBUTE = re.compile(r"\[\s*(Ignore|Explicit)\b")
+
+
+# The job carrying the blocking half of the network leg's assertion --
+# "were the 54 collected at all", as opposed to "did they pass", which is
+# allowed to go red when someone else's host does. build.yml says why.
+DISCOVERY_JOB = "network-discovered"
+
+
+def jobs_section(workflow):
+    """Everything from `jobs:` on.
+
+    `on:` and `concurrency:` have two-space children too, so job lookups
+    that did not start here could match `push:` as though it were a job.
+    """
+    start = workflow.find("\njobs:\n")
+
+    return workflow if start < 0 else workflow[start:]
+
+
+def job_block(workflow, job_id):
+    """The text of one job, from its two-space `id:` line to the next job."""
+    section = jobs_section(workflow)
+    start = section.find("\n  " + job_id + ":\n")
+
+    if start < 0:
+        return None
+
+    end = re.search(r"\n  [A-Za-z0-9_-]+:\n", section[start + 1:])
+
+    return section[start:] if end is None else section[start:start + 1 + end.start()]
 
 
 def step_block(workflow, name):
@@ -89,6 +120,19 @@ def network_suite(workflow):
     if step is None or "./test.sh Linux Integration Test" not in step:
         problems.append("build.yml: the 'Run integration-category tests' step no longer runs ./test.sh Linux Integration Test")
 
+    job = job_block(workflow, DISCOVERY_JOB)
+
+    if job is None:
+        problems.append("build.yml: the '{0}' job is gone, so nothing blocks on the network tests being collected".format(DISCOVERY_JOB))
+    else:
+        # Job-level only: the artifact download inside it is deliberately
+        # continue-on-error, and that one must not read as this one.
+        if re.search(r"\n    continue-on-error:", job):
+            problems.append("build.yml: the '{0}' job has continue-on-error, so it no longer blocks".format(DISCOVERY_JOB))
+
+        if "if: always()" not in job:
+            problems.append("build.yml: the '{0}' job is no longer `if: always()`, so a network leg that died would skip it -- and branch protection reads a skipped job as success".format(DISCOVERY_JOB))
+
     with open(TEST_SH, encoding="utf-8") as f:
         # LINUX is only excluded on the Windows leg. Integration ADDS
         # Category=IntegrationTest rather than excluding it, so the
@@ -98,13 +142,20 @@ def network_suite(workflow):
     return excluded, problems
 
 
-# Each list, the CI step that must run its tests, and the result file the
-# check reads. A list missing here is an error, so a new list cannot be
-# added without saying where it runs.
+# Each list, the CI step that must run its tests, and the arguments every
+# assert_tests_ran.py invocation that reads it must still be called with. A
+# list missing here is an error, so a new list cannot be added without
+# saying where it runs.
 SUITES = {
-    "unit.txt": (unit_suite, "TestResult.xml"),
-    "playwright.txt": (playwright_suite, "PlaywrightResult.xml"),
-    "network.txt": (network_suite, "TestResult.xml"),
+    "unit.txt": (unit_suite, ["TestResult.xml .github/required-tests/unit.txt"]),
+    "playwright.txt": (playwright_suite, ["PlaywrightResult.xml .github/required-tests/playwright.txt"]),
+    # Two, because this check is split by blame: the discovered half blocks
+    # in its own job, the passed half only reports. Losing either one is a
+    # silent hole, so both are named here.
+    "network.txt": (network_suite, [
+        "--discovered-only TestResult.xml .github/required-tests/network.txt",
+        "--passed-only TestResult.xml .github/required-tests/network.txt",
+    ]),
 }
 
 
@@ -265,14 +316,15 @@ def main():
             problems.append("{0}: no CI step is configured for this list in scripts/check_required_tests_wired.py".format(list_name))
             continue
 
-        suite, results_file = SUITES[list_name]
+        suite, invocations = SUITES[list_name]
         excluded, suite_problems = suite(workflow)
         problems.extend(suite_problems)
 
-        invocation = "scripts/assert_tests_ran.py {0} .github/required-tests/{1}".format(results_file, list_name)
+        for arguments in invocations:
+            invocation = "scripts/assert_tests_ran.py " + arguments
 
-        if invocation not in workflow:
-            problems.append("build.yml: nothing runs `{0}` any more".format(invocation))
+            if invocation not in workflow:
+                problems.append("build.yml: nothing runs `{0}` any more".format(invocation))
 
         with open(os.path.join(LIST_DIR, list_name), encoding="utf-8") as f:
             required = parse_required(f.read())

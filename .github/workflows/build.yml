@@ -669,15 +669,18 @@ jobs:
           TEST_DIR: _tests/net10.0/linux-x64/publish
         run: ./test.sh Linux Integration Test
 
-      - name: Check the HTTP client tests actually executed
-        # This leg is allowed to fail and is not a required check, both on
-        # purpose -- every test in it reaches a third party. What is NOT
-        # acceptable is it reporting green having run nothing: the fixture
-        # self-skips when its host is unreachable, and the leg exists to run
-        # those 54. See .github/required-tests/network.txt.
+      - name: Check the HTTP client tests passed
+        # The OUTCOME half of the assertion, and the half that stays
+        # non-blocking: this is what reddens when httpbin1.servarr.com is
+        # having a bad day rather than when we broke something, which is
+        # the same reason the whole job carries continue-on-error.
+        #
+        # The other half -- that those 54 were collected and run at all --
+        # is nobody else's fault when it fails, so it blocks instead. See
+        # the `network-discovered` job below.
         if: always()
         shell: bash
-        run: python3 scripts/assert_tests_ran.py TestResult.xml .github/required-tests/network.txt
+        run: python3 scripts/assert_tests_ran.py --passed-only TestResult.xml .github/required-tests/network.txt
 
       - name: Upload integration results
         if: always()
@@ -689,6 +692,51 @@ jobs:
             TestLog.txt
           retention-days: 7
           if-no-files-found: ignore
+
+  network-discovered:
+    # The BLOCKING half of the network leg's assertion, split out by blame.
+    #
+    # "Integration tests (network)" is non-blocking on purpose and stays
+    # that way: every test in it reaches a third party, and a suite that
+    # reddens for reasons the committer cannot fix is one people learn to
+    # ignore. But that reasoning only ever covered test OUTCOMES. A run
+    # that collected none of the 54 is not someone else's server having a
+    # bad day -- it is our own wiring broken, and it is exactly how those
+    # 54 went unexecuted in CI for long enough that one of them sat three
+    # weeks past a hard-coded cookie expiry without anyone noticing.
+    #
+    #   did they run at all  -> blocks  (this job; required on main)
+    #   did they pass        -> visible (the step in the job above)
+    #
+    # An unreachable host is the case that proves the split is drawn in
+    # the right place: HttpClientFixture's [OneTimeSetUp] calls
+    # Assert.Inconclusive, NUnit still reports all 54 as test-cases, and
+    # only the outcome half goes red.
+    name: Network tests discovered
+    needs: integration-tests
+    # always(): a network leg that died still has to answer for the results
+    # it did or did not leave behind. Skipping here would report success to
+    # branch protection, which is the failure mode this job exists to close.
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Download integration results
+        uses: actions/download-artifact@v8
+        # Tolerated so that no results at all produces the script's own
+        # message -- "nothing proves the required tests ran" -- instead of
+        # an opaque artifact-not-found. The job still fails either way.
+        continue-on-error: true
+        with:
+          name: test-results-integration
+          path: .
+
+      - name: Assert the HTTP client tests were collected
+        shell: bash
+        run: python3 scripts/assert_tests_ran.py --discovered-only TestResult.xml .github/required-tests/network.txt
 
   playwright:
     # The Playwright smoke suite ran in no CI job at all. It is gated
