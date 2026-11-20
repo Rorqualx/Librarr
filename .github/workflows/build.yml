@@ -669,6 +669,16 @@ jobs:
           TEST_DIR: _tests/net10.0/linux-x64/publish
         run: ./test.sh Linux Integration Test
 
+      - name: Check the HTTP client tests actually executed
+        # This leg is allowed to fail and is not a required check, both on
+        # purpose -- every test in it reaches a third party. What is NOT
+        # acceptable is it reporting green having run nothing: the fixture
+        # self-skips when its host is unreachable, and the leg exists to run
+        # those 54. See .github/required-tests/network.txt.
+        if: always()
+        shell: bash
+        run: python3 scripts/assert_tests_ran.py TestResult.xml .github/required-tests/network.txt
+
       - name: Upload integration results
         if: always()
         uses: actions/upload-artifact@v7

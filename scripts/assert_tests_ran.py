@@ -48,7 +48,16 @@ def parse_required(text):
 
 
 def matches(entry, fullname):
-    return fullname == entry or fullname.startswith(entry + ".") or fullname.startswith(entry + "(")
+    # `entry + "<"` is for a GENERIC fixture. NUnit reports its cases as
+    # Fixture<TypeArg>.method, but the entry has to name the fixture without
+    # its type argument, because that is the form check_required_tests_wired.py
+    # can resolve against `class Fixture<T>` in source. Without this an entry
+    # for a generic fixture silently matches nothing, which is the one failure
+    # mode this whole script exists to prevent.
+    return (fullname == entry
+            or fullname.startswith(entry + ".")
+            or fullname.startswith(entry + "(")
+            or fullname.startswith(entry + "<"))
 
 
 def check(results_xml, required):
