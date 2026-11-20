@@ -33,13 +33,18 @@ namespace NzbDrone.Integration.Test.Client
                 RequestFormat = DataFormat.Json,
             };
 
+            // X-Api-Key is a default header on the shared RestClient
+            // (IntegrationTestBase.InitRestClients). RestSharp 106 let a
+            // request-level header of the same name replace the client
+            // default; 107+ sends BOTH and the server receives them joined
+            // as "<key>, <key>", which does not match the configured key and
+            // comes back 401. Adding it here again is redundant, so don't.
             request.AddHeader("Authorization", _apiKey);
-            request.AddHeader("X-Api-Key", _apiKey);
 
             return request;
         }
 
-        public string Execute(IRestRequest request, HttpStatusCode statusCode)
+        public string Execute(RestRequest request, HttpStatusCode statusCode)
         {
             _logger.Info("{0}: {1}", request.Method, _restClient.BuildUri(request));
 
@@ -60,7 +65,7 @@ namespace NzbDrone.Integration.Test.Client
             return response.Content;
         }
 
-        public T Execute<T>(IRestRequest request, HttpStatusCode statusCode)
+        public T Execute<T>(RestRequest request, HttpStatusCode statusCode)
             where T : class, new()
         {
             var content = Execute(request, statusCode);
@@ -68,14 +73,23 @@ namespace NzbDrone.Integration.Test.Client
             return Json.Deserialize<T>(content);
         }
 
-        private static void AssertDisableCache(IRestResponse response)
+        private static void AssertDisableCache(RestResponse response)
         {
             // cache control header gets reordered on net core
             var headers = response.Headers;
+
+            // RestSharp 107+ splits a response's headers in two: Headers
+            // holds the response headers, ContentHeaders the entity ones.
+            // 106 put both in Headers. Expires is an entity header, so it is
+            // the one that moved -- Cache-Control and Pragma stay put. Looking
+            // it up in Headers throws "Sequence contains no matching element"
+            // rather than failing an assertion.
+            var contentHeaders = response.ContentHeaders;
+
             ((string)headers.SingleOrDefault(c => c.Name == "Cache-Control")?.Value ?? string.Empty).Split(',').Select(x => x.Trim())
                 .Should().BeEquivalentTo("no-store, no-cache".Split(',').Select(x => x.Trim()));
             headers.Single(c => c.Name == "Pragma").Value.Should().Be("no-cache");
-            headers.Single(c => c.Name == "Expires").Value.Should().Be("-1");
+            contentHeaders.Single(c => c.Name == "Expires").Value.Should().Be("-1");
         }
     }
 
@@ -96,14 +110,14 @@ namespace NzbDrone.Integration.Test.Client
         public PagingResource<TResource> GetPaged(int pageNumber, int pageSize, string sortKey, string sortDir, string filterKey = null, object filterValue = null)
         {
             var request = BuildRequest();
-            request.AddParameter("page", pageNumber);
-            request.AddParameter("pageSize", pageSize);
-            request.AddParameter("sortKey", sortKey);
-            request.AddParameter("sortDir", sortDir);
+            request.AddQueryParameter("page", pageNumber);
+            request.AddQueryParameter("pageSize", pageSize);
+            request.AddQueryParameter("sortKey", sortKey);
+            request.AddQueryParameter("sortDir", sortDir);
 
             if (filterKey != null && filterValue != null)
             {
-                request.AddParameter(filterKey, filterValue);
+                request.AddQueryParameter(filterKey, filterValue.ToString());
             }
 
             return Get<PagingResource<TResource>>(request);
@@ -161,30 +175,30 @@ namespace NzbDrone.Integration.Test.Client
             return Put<object>(request, statusCode);
         }
 
-        public T Get<T>(IRestRequest request, HttpStatusCode statusCode = HttpStatusCode.OK)
+        public T Get<T>(RestRequest request, HttpStatusCode statusCode = HttpStatusCode.OK)
             where T : class, new()
         {
-            request.Method = Method.GET;
+            request.Method = Method.Get;
             return Execute<T>(request, statusCode);
         }
 
-        public T Post<T>(IRestRequest request, HttpStatusCode statusCode = HttpStatusCode.Created)
+        public T Post<T>(RestRequest request, HttpStatusCode statusCode = HttpStatusCode.Created)
             where T : class, new()
         {
-            request.Method = Method.POST;
+            request.Method = Method.Post;
             return Execute<T>(request, statusCode);
         }
 
-        public T Put<T>(IRestRequest request, HttpStatusCode statusCode = HttpStatusCode.Accepted)
+        public T Put<T>(RestRequest request, HttpStatusCode statusCode = HttpStatusCode.Accepted)
             where T : class, new()
         {
-            request.Method = Method.PUT;
+            request.Method = Method.Put;
             return Execute<T>(request, statusCode);
         }
 
-        public void Delete(IRestRequest request, HttpStatusCode statusCode = HttpStatusCode.OK)
+        public void Delete(RestRequest request, HttpStatusCode statusCode = HttpStatusCode.OK)
         {
-            request.Method = Method.DELETE;
+            request.Method = Method.Delete;
             Execute<object>(request, statusCode);
         }
     }
