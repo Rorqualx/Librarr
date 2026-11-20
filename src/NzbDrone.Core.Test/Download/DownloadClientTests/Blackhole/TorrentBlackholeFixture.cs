@@ -197,13 +197,13 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.Blackhole
         }
 
         [Test]
-        public void Download_should_not_save_magnet_if_disabled()
+        public async Task Download_should_not_save_magnet_if_disabled()
         {
             GivenMagnetFilePath();
             var remoteBook = CreateRemoteBook();
             remoteBook.Release.DownloadUrl = null;
 
-            Assert.ThrowsAsync<ReleaseDownloadException>(async () => await Subject.Download(remoteBook, CreateIndexer()));
+            await Assert.ThrowsAsync<ReleaseDownloadException>(async () => await Subject.Download(remoteBook, CreateIndexer()));
 
             Mocker.GetMock<IHttpClient>().Verify(c => c.GetAsync(It.Is<HttpRequest>(v => v.Url.FullUri == _downloadUrl)), Times.Never());
             Mocker.GetMock<IDiskProvider>().Verify(c => c.OpenWriteStream(_filePath), Times.Never());
@@ -243,12 +243,12 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.Blackhole
         }
 
         [Test]
-        public void Download_should_throw_if_magnet_and_torrent_url_does_not_exist()
+        public async Task Download_should_throw_if_magnet_and_torrent_url_does_not_exist()
         {
             var remoteBook = CreateRemoteBook();
             remoteBook.Release.DownloadUrl = null;
 
-            Assert.ThrowsAsync<ReleaseDownloadException>(async () => await Subject.Download(remoteBook, CreateIndexer()));
+            await Assert.ThrowsAsync<ReleaseDownloadException>(async () => await Subject.Download(remoteBook, CreateIndexer()));
         }
 
         [Test]

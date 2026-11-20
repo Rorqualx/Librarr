@@ -498,7 +498,7 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.DownloadStationTests
         }
 
         [Test]
-        public void Download_should_throw_and_not_add_task_if_cannot_get_serial_number()
+        public async Task Download_should_throw_and_not_add_task_if_cannot_get_serial_number()
         {
             var remoteBook = CreateRemoteBook();
 
@@ -506,7 +506,7 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.DownloadStationTests
                   .Setup(s => s.GetSerialNumber(_settings))
                   .Throws(new ApplicationException("Some unknown exception, HttpException or DownloadClientException"));
 
-            Assert.ThrowsAsync(Is.InstanceOf<Exception>(), async () => await Subject.Download(remoteBook, CreateIndexer()));
+            await Assert.ThrowsAsync(Is.InstanceOf<Exception>(), async () => await Subject.Download(remoteBook, CreateIndexer()));
 
             Mocker.GetMock<IDownloadStationTaskProxy>()
                   .Verify(v => v.AddTaskFromUrl(It.IsAny<string>(), null, _settings), Times.Never());

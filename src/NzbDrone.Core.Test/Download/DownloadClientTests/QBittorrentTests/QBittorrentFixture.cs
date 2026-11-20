@@ -480,7 +480,7 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.QBittorrentTests
         }
 
         [Test]
-        public void Download_should_refuse_magnet_if_no_trackers_provided_and_dht_is_disabled()
+        public async Task Download_should_refuse_magnet_if_no_trackers_provided_and_dht_is_disabled()
         {
             Mocker.GetMock<IQBittorrentProxy>()
                   .Setup(s => s.GetConfig(It.IsAny<QBittorrentSettings>()))
@@ -489,7 +489,7 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.QBittorrentTests
             var remoteBook = CreateRemoteBook();
             remoteBook.Release.DownloadUrl = "magnet:?xt=urn:btih:ZPBPA2P6ROZPKRHK44D5OW6NHXU5Z6KR";
 
-            Assert.ThrowsAsync<ReleaseDownloadException>(async () => await Subject.Download(remoteBook, CreateIndexer()));
+            await Assert.ThrowsAsync<ReleaseDownloadException>(async () => await Subject.Download(remoteBook, CreateIndexer()));
         }
 
         [Test]

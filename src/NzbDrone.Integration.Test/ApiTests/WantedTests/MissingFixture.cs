@@ -4,6 +4,15 @@ using NUnit.Framework;
 using NzbDrone.Core.Books;
 using Readarr.Api.V1.RootFolders;
 
+// NUnit 5 deprecates [Order] in favour of DependsOnTest/DependsOnFixture.
+// This fixture uses [Order] as loose STAGES -- several tests share one stage
+// number -- not as a 1:1 dependency chain, so there is no mechanical
+// conversion: each dependent would have to name one specific predecessor.
+// That is a behaviour change too (a failed dependency SKIPS its dependents,
+// altering what the nightly integration run reports), so it belongs in its
+// own change. [Order] still works in NUnit 5; suppress the deprecation here.
+#pragma warning disable CS0618
+
 namespace NzbDrone.Integration.Test.ApiTests.WantedTests
 {
     [TestFixture]
@@ -91,3 +100,5 @@ namespace NzbDrone.Integration.Test.ApiTests.WantedTests
         }
     }
 }
+
+#pragma warning restore CS0618

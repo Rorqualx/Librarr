@@ -12,8 +12,17 @@ namespace NzbDrone.Windows.Test.EnvironmentInfo
         [Test]
         public void should_get_framework_version()
         {
-            Subject.Version.Major.Should().Be(4);
-            Subject.Version.Minor.Should().BeOneOf(0, 5, 6, 7, 8);
+            // Under NUnit 3, [Platform("Net")] meant .NET FRAMEWORK, so on
+            // net10.0 this test was filtered out and reported Inconclusive --
+            // it had not actually run since the .NET 6 migration. NUnit 5
+            // matches "Net" against modern .NET, so it runs now, and the old
+            // assertion (major 4, minor 0/5/6/7/8) was a .NET Framework 4.x
+            // expectation that can never hold again.
+            //
+            // PlatformInfo.Version is just Environment.Version. Assert the
+            // floor -- modern .NET rather than Framework -- so that a runtime
+            // major upgrade does not have to touch this test.
+            Subject.Version.Major.Should().BeGreaterOrEqualTo(5);
         }
     }
 }
