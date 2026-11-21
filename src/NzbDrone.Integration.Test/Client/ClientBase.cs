@@ -51,7 +51,23 @@ namespace NzbDrone.Integration.Test.Client
             var response = _restClient.Execute(request);
             _logger.Info("Response: {0}", response.Content);
 
-            if (response.ErrorException != null)
+            // RestSharp 114 sets ErrorException for ANY non-2xx response, where
+            // 106 set it only when the request never completed. Rethrowing it
+            // unconditionally threw out of every test that deliberately asserts
+            // a 4xx -- the InvalidPost/InvalidPut helpers below -- before the
+            // StatusCode assertion underneath could run. Six nightly fixtures
+            // failed that way, and the push pipeline cannot catch it, because
+            // this suite runs only in nightly-integration.yml.
+            //
+            // ResponseStatus is NOT the discriminator. Measured against 114:
+            //
+            //   400                -> StatusCode=BadRequest, ResponseStatus=Error, ErrorMessage=null
+            //   connection refused -> StatusCode=0,          ResponseStatus=Error, ErrorMessage="Connection refused"
+            //
+            // What still means "the request never got there" is that no HTTP
+            // status came back at all, and only that is this method's to throw
+            // on. A status the caller asked for belongs to the assertion.
+            if ((int)response.StatusCode == 0)
             {
                 throw response.ErrorException;
             }
