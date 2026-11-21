@@ -31,7 +31,15 @@ if [ -z "$STAGED_FILES" ]; then
 fi
 
 FAIL=0
+SKIPPED=""
 err() { echo "  [pre-commit] $1" >&2; FAIL=1; }
+
+# A check that could not run is its own outcome: not a pass, not a failure.
+# Announce it when it happens AND keep it for the summary, because a line
+# that scrolls past mid-run is indistinguishable from a clean commit by the
+# time the hook exits -- and a tool reporting success for work it never did
+# is worse than one that is simply absent.
+skip() { echo "  [pre-commit] SKIPPED — $1" >&2; SKIPPED="${SKIPPED}$1"$'\n'; }
 
 # Categorise staged files into newline-separated bucket strings.
 CS_FILES=""
@@ -133,7 +141,37 @@ fi
 
 # --- 7. dotnet format whitespace --verify-no-changes ----------------------
 # Group staged C# files by csproj for one dotnet-format call per project.
-if [ "${SKIP_FORMAT_CHECK:-0}" != "1" ] && [ -n "$CS_FILES" ] && command -v dotnet >/dev/null 2>&1; then
+#
+# Resolving `dotnet` is part of this check, not a preamble to it. Trusting
+# `command -v dotnet` is what produced a run of FALSE FAILURES here: on at
+# least one machine /usr/local/share/dotnet/dotnet is runtime-only, so
+# `dotnet format` died for want of an SDK and the hook reported that as a
+# formatting violation -- a check failing on correct code, which is exactly
+# how people learn to reach for SKIP_FORMAT_CHECK=1.
+#
+# So prefer ~/.dotnet, fall back to PATH, and either way prove an SDK
+# actually loads before trusting the binary. `--version` is the probe
+# because it honours global.json: an SDK that is installed but is not the
+# pinned one reads as unusable, which for `dotnet format` is what it is.
+# Checking the path alone would only move the failure to the next machine
+# with a different layout.
+if [ "${SKIP_FORMAT_CHECK:-0}" != "1" ] && [ -n "$CS_FILES" ]; then
+    DOTNET=""
+    if [ -x "$HOME/.dotnet/dotnet" ]; then
+        DOTNET="$HOME/.dotnet/dotnet"
+    elif command -v dotnet >/dev/null 2>&1; then
+        DOTNET="$(command -v dotnet)"
+    fi
+
+    if [ -z "$DOTNET" ]; then
+        skip "no dotnet on PATH or in ~/.dotnet — C# formatting was NOT checked. CI still enforces it."
+    elif ! "$DOTNET" --version >/dev/null 2>&1; then
+        skip "$DOTNET loads no usable SDK (runtime-only, or global.json pins one that is not installed) — C# formatting was NOT checked. CI still enforces it."
+        DOTNET=""
+    fi
+fi
+
+if [ "${SKIP_FORMAT_CHECK:-0}" != "1" ] && [ -n "$CS_FILES" ] && [ -n "${DOTNET:-}" ]; then
     SEEN_PROJECTS=""
     while IFS= read -r f; do
         [ -z "$f" ] && continue
@@ -162,7 +200,7 @@ if [ "${SKIP_FORMAT_CHECK:-0}" != "1" ] && [ -n "$CS_FILES" ] && command -v dotn
         done <<< "$(iter "$CS_FILES")"
 
         if [ -n "$INCLUDES" ]; then
-            if ! dotnet format whitespace "$csproj" \
+            if ! "$DOTNET" format whitespace "$csproj" \
                     --include $INCLUDES \
                     --verify-no-changes --verbosity quiet >/dev/null 2>&1; then
                 err "dotnet format check failed for $csproj. Run: dotnet format whitespace \"$csproj\" --include$INCLUDES"
@@ -188,7 +226,7 @@ if [ "${SKIP_LINT:-0}" != "1" ] && [ -n "$FRONTEND_FILES" ]; then
             err "ESLint failed on staged frontend files. Run 'yarn lint-fix' and re-stage."
         fi
     else
-        echo "  [pre-commit] eslint missing — run 'yarn install' from repo root." >&2
+        skip "eslint missing — staged frontend files were NOT linted. Run 'yarn install' from the repo root."
     fi
 fi
 if [ "${SKIP_LINT:-0}" != "1" ] && [ -n "$CSS_FILES" ]; then
@@ -204,6 +242,8 @@ if [ "${SKIP_LINT:-0}" != "1" ] && [ -n "$CSS_FILES" ]; then
             $FILES_ARG >&2; then
             err "Stylelint failed on staged CSS files."
         fi
+    else
+        skip "stylelint missing — staged CSS was NOT linted. Run 'yarn install' from the repo root."
     fi
 fi
 
@@ -229,14 +269,34 @@ if [ "${SKIP_REQUIRED_TESTS_CHECK:-0}" != "1" ]; then
             fi
         fi
     else
-        echo "  [pre-commit] python3 missing — required-tests check skipped." >&2
+        skip "python3 missing — the required-regression-tests wiring was NOT checked."
     fi
 fi
 
+report_skips() {
+    while IFS= read -r s; do
+        [ -n "$s" ] && echo "    - $s" >&2
+    done <<< "$SKIPPED"
+}
+
 if [ $FAIL -ne 0 ]; then
     echo "" >&2
+    if [ -n "$SKIPPED" ]; then
+        echo "  [pre-commit] and these checks could not run at all:" >&2
+        report_skips
+    fi
     echo "  [pre-commit] commit aborted; see violations above." >&2
     echo "  Bypass at your own risk: ACK_FRAGILE=1, SKIP_FORMAT_CHECK=1, SKIP_LINT=1, SKIP_REQUIRED_TESTS_CHECK=1" >&2
     exit 1
+fi
+
+# Passing with a check that never ran is not the same as passing, so say so
+# as its own verdict. Silence here would read as "everything was checked
+# and everything was clean", which is the claim this hook cannot make.
+if [ -n "$SKIPPED" ]; then
+    echo "" >&2
+    echo "  [pre-commit] COMMIT ALLOWED — but these checks could not run:" >&2
+    report_skips
+    echo "  [pre-commit] Nothing above says your change is clean on them." >&2
 fi
 exit 0
