@@ -143,11 +143,18 @@ fi
 # Group staged C# files by csproj for one dotnet-format call per project.
 #
 # Resolving `dotnet` is part of this check, not a preamble to it. Trusting
-# `command -v dotnet` is what produced a run of FALSE FAILURES here: on at
-# least one machine /usr/local/share/dotnet/dotnet is runtime-only, so
-# `dotnet format` died for want of an SDK and the hook reported that as a
-# formatting violation -- a check failing on correct code, which is exactly
-# how people learn to reach for SKIP_FORMAT_CHECK=1.
+# `command -v dotnet` is what produced a run of FALSE FAILURES here. On this
+# machine /usr/local/share/dotnet/dotnet carries SDK 6.0.423; global.json
+# pins 10.0.302 and `rollForward: latestFeature` will not cross a major
+# version, so from inside this repo that binary exits 145 and `dotnet
+# format` never runs at all. The hook reported that as a formatting
+# violation -- a check failing on correct code, which is how people learn to
+# reach for SKIP_FORMAT_CHECK=1.
+#
+# Note that this is the ORDINARY shape, not an exotic one: an older SDK
+# installed beside a pinned newer one is the common case, and a machine with
+# no SDK whatsoever is the rare one. Any check that shells out to a pinned
+# toolchain has this failure available to it.
 #
 # So prefer ~/.dotnet, fall back to PATH, and either way prove an SDK
 # actually loads before trusting the binary. `--version` is the probe
@@ -166,7 +173,7 @@ if [ "${SKIP_FORMAT_CHECK:-0}" != "1" ] && [ -n "$CS_FILES" ]; then
     if [ -z "$DOTNET" ]; then
         skip "no dotnet on PATH or in ~/.dotnet — C# formatting was NOT checked. CI still enforces it."
     elif ! "$DOTNET" --version >/dev/null 2>&1; then
-        skip "$DOTNET loads no usable SDK (runtime-only, or global.json pins one that is not installed) — C# formatting was NOT checked. CI still enforces it."
+        skip "$DOTNET cannot run an SDK for this repo — none installed, or none satisfying global.json. C# formatting was NOT checked. CI still enforces it."
         DOTNET=""
     fi
 fi
