@@ -158,6 +158,7 @@
     "yarn": "1.22.22"
   },
   "resolutions": {
-    "**/@typescript-eslint/typescript-estree/minimatch": "^9.0.7"
+    "**/@typescript-eslint/typescript-estree/minimatch": "^9.0.7",
+    "postcss-color-function/postcss": "8.5.32"
   }
 }
