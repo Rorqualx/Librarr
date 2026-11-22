@@ -94,7 +94,12 @@ namespace NzbDrone.Integration.Test.ApiTests
             }
         }
 
+        // ApiContract: asserts a 4xx, and needs no third party to do it.
+        // The push pipeline runs exactly the tests carrying this category
+        // (build.yml, "API 4xx contract tests"). Do not put it on a test
+        // that reaches OpenLibrary -- see _AssemblyGate.
         [Test]
+        [Category("ApiContract")]
         public void invalid_path_should_return_bad_request()
         {
             var rootFolder = new RootFolderResource

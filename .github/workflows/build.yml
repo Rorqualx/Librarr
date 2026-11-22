@@ -738,6 +738,134 @@ jobs:
         shell: bash
         run: python3 scripts/assert_tests_ran.py --discovered-only TestResult.xml .github/required-tests/network.txt
 
+  api-contract:
+    # The six integration tests that assert a 4xx, on every push.
+    #
+    # PR #131 made ClientBase.Execute rethrow RestSharp's ErrorException.
+    # 106 set that only when a request never completed; 114 sets it for any
+    # non-2xx, so every test that deliberately asserts a 4xx threw out of
+    # the helper before its own assertion could run. Nothing available to
+    # #131 could have caught it: the tests that walk that path all live in
+    # NzbDrone.Integration.Test, which runs nightly. It shipped, and was
+    # fixed the next day in #133.
+    #
+    # These six are the part of that suite which can honestly run per push:
+    # they assert a 4xx against a local instance and reach no third party
+    # doing it. .github/required-tests/api-contract.txt names them.
+    #
+    # THIS DOES NOT WEAKEN _AssemblyGate, AND MUST NOT BE MADE TO.
+    #
+    # READARR_RUN_INTEGRATION=1 below is the gate's own documented opt-in.
+    # What keeps the other 88 tests out is the --filter, not the gate, and
+    # those 88 are the ones that re-fetch from openlibrary.org with empty
+    # appdata -- running them in one pass got the source IP refused on 26 of
+    # 88, for minutes afterwards. So the filter is load-bearing, and it is
+    # held in place from both sides: check_required_tests_wired.py fails the
+    # commit if it disappears, and the --only assertion below fails the job
+    # if anything outside the list ran anyway.
+    name: API 4xx contract tests
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-22.04
+    # NON-BLOCKING TO START -- REVISIT 2026-12-19.
+    #
+    # Not for the usual reason. Nothing here touches a third party, so
+    # unlike the network leg a red really is ours. It is non-blocking only
+    # because the cost of booting two real instances on every push has
+    # never been measured, and the step below prints its own wall clock to
+    # the job summary so that it can be. A non-blocking red nobody acts on
+    # is decoration, which is why that date is an issue and not a hope.
+    continue-on-error: true
+    # Two instances, each with a 30s task-init wait, on a cold runner.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download backend output
+        uses: actions/download-artifact@v8
+        with:
+          name: backend-linux
+          path: .
+
+      - name: Download UI output
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-ui
+          path: _output/UI
+
+      - name: Assemble the tree NzbDroneRunner expects
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=_tests/net10.0/linux-x64/bin
+          # Same assembly the Playwright job does, and for the same reason:
+          # in Release the runner launches <testdir>/../bin/Readarr and
+          # asserts a UI sits beside it, which only a full ./build.sh
+          # produces. cp -a preserves mtimes deliberately -- the runner's
+          # staleness guard fails when _output/UI is newer than the copy
+          # next to the binary.
+          mkdir -p "$app"
+          cp -a _output/net10.0/linux-x64/publish/. "$app/"
+          cp -a _output/UI "$app/UI"
+          # upload-artifact strips POSIX exec bits on non-Windows.
+          chmod +x "$app/Readarr"
+          chmod +x _tests/net10.0/linux-x64/publish/Readarr.Test.Dummy 2>/dev/null || true
+
+      - name: Run the 4xx contract tests
+        shell: bash
+        env:
+          # _AssemblyGate's documented opt-in. The --filter on the next line
+          # is what keeps this to six tests; do not remove one without the
+          # other.
+          READARR_RUN_INTEGRATION: '1'
+        run: |
+          set -uo pipefail
+          start=$SECONDS
+          dotnet test _tests/net10.0/linux-x64/publish/Readarr.Integration.Test.dll \
+            --filter 'TestCategory=ApiContract' \
+            --logger "nunit;LogFilePath=$PWD/ApiContractResult.xml"
+          status=$?
+          elapsed=$(( SECONDS - start ))
+          # To stdout as well as the summary, and in a fixed, greppable shape.
+          # The summary is the readable half but has no API, so collecting a
+          # month of these to decide on blocking (#137) would otherwise mean
+          # opening a hundred runs by hand:
+          #   gh run view <id> --log | grep API_4XX_WALL_CLOCK_SECONDS
+          echo "API_4XX_WALL_CLOCK_SECONDS=${elapsed}"
+          {
+            echo "### API 4xx contract tests"
+            echo
+            echo "Test step wall clock: **${elapsed}s** (two instances booted)."
+            echo
+            echo "Non-blocking until **2026-12-19**, when this number is what"
+            echo "decides whether it starts blocking."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - name: Check the six ran, passed, and nothing else did
+        # --only is the half that protects OpenLibrary rather than us: if the
+        # filter above is ever widened, or the category lands on a test that
+        # does reach out, the strays are named here instead of being found by
+        # openlibrary.org's rate limiter.
+        if: always()
+        shell: bash
+        run: python3 scripts/assert_tests_ran.py --only ApiContractResult.xml .github/required-tests/api-contract.txt
+
+      - name: Upload 4xx contract results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-api-contract
+          path: ApiContractResult.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
   playwright:
     # The Playwright smoke suite ran in no CI job at all. It is gated
     # behind READARR_RUN_PLAYWRIGHT=1 so a bare `dotnet test` skips it,
