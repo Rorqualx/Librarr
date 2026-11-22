@@ -1,0 +1,44 @@
+# The six integration tests that assert a 4xx, run in the PUSH pipeline by
+# the "API 4xx contract tests" job. Same entry format as unit.txt.
+#
+# WHY THIS LIST EXISTS
+#
+# PR #131 made ClientBase.Execute rethrow RestSharp's ErrorException. In
+# RestSharp 106 that was set only when the request never completed; 114 sets
+# it for ANY non-2xx. So every test that deliberately asserts a 4xx threw out
+# of the helper before reaching its own assertion -- and no check available to
+# #131 could see it, because the only tests that exercise that path live in
+# NzbDrone.Integration.Test, which runs nightly and not on push. The fix
+# shipped a day later as #133.
+#
+# These six are the subset of that suite which can run on every push: they
+# assert a 4xx and reach no third party while doing it. Both fixtures boot a
+# local instance and talk only to it. That is the whole selection rule, and it
+# is enforced two ways -- the [Category("ApiContract")] attribute names them in
+# source, and --only below fails the job if anything outside this list runs.
+#
+# DO NOT WIDEN THIS BY RELAXING _AssemblyGate.
+#
+# The job sets READARR_RUN_INTEGRATION=1, which is the gate's documented
+# opt-in, and then filters to TestCategory=ApiContract. The gate exists to
+# keep the other 88 tests off the push pipeline: they re-fetch from
+# openlibrary.org with empty appdata, and running them in one pass got the
+# source IP refused on 26 of 88, for minutes. Un-gating is fine. Dropping the
+# filter is not, and check_required_tests_wired.py fails the commit if it
+# goes missing.
+#
+# BLOCKING: NOT YET. Revisit 2026-12-19.
+#
+# Nothing here depends on a third party, so unlike network.txt both halves of
+# the assertion are ours to answer and neither is split off. The job is
+# non-blocking only because its cost on a per-push budget is unmeasured: it
+# boots two real instances. The step writes its own duration to the job
+# summary so that decision has numbers behind it. A non-blocking red nobody
+# acts on is decoration, so the revisit date above is a commitment, tracked in
+# its own issue -- not a hope.
+NzbDrone.Integration.Test.ApiTests.NamingConfigFixture.should_get_bad_request_if_standard_format_is_empty
+NzbDrone.Integration.Test.ApiTests.NamingConfigFixture.should_get_bad_request_if_standard_format_doesnt_contain_track_number_and_title
+NzbDrone.Integration.Test.ApiTests.NamingConfigFixture.should_not_require_format_when_rename_tracks_is_false
+NzbDrone.Integration.Test.ApiTests.NamingConfigFixture.should_require_format_when_rename_tracks_is_true
+NzbDrone.Integration.Test.ApiTests.NamingConfigFixture.should_get_bad_request_if_author_folder_format_does_not_contain_author_name
+NzbDrone.Integration.Test.ApiTests.RootFolderFixture.invalid_path_should_return_bad_request

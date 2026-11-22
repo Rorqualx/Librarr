@@ -133,6 +133,7 @@ number that is wrong is worse than no number, because it gets trusted.
   | `NzbDrone.Playwright.Test`, 11 local-only tests (incl. URL-base regression) | `build.yml` per push | **yes** |
   | `NzbDrone.Playwright.Test`, 6 `RequiresOpenLibrary` | `build.yml` per push | no |
   | `Category=IntegrationTest` minus the integration suite (HttpClientFixture's 54) | `build.yml` per push | outcome no, *discovery* yes |
+  | `NzbDrone.Integration.Test`, the 6 `ApiContract` tests | `build.yml` per push | not yet — revisit 2026-12-19 |
   | `NzbDrone.Integration.Test` (94) | `nightly-integration.yml`, one fixture at a time | n/a (scheduled) |
 
   Anything touching a third party is non-blocking on purpose — red should
@@ -140,7 +141,13 @@ number that is wrong is worse than no number, because it gets trusted.
   whether those tests were *collected* at all, which no third party
   controls: the `Network tests discovered` job asserts that and blocks.
 
-  **Do not move the integration suite into the push pipeline.** Running
+  The one exception is the six `[Category("ApiContract")]` tests, which
+  assert a 4xx against a local instance and reach no third party: they run
+  per push in "API 4xx contract tests", which sets
+  `READARR_RUN_INTEGRATION=1` and filters to that category. The filter is
+  what keeps the other 88 out, so it is load-bearing — see `_AssemblyGate`.
+
+  **Do not move the rest of the integration suite into the push pipeline.** Running
   its fixtures in one pass gets the source IP refused by openlibrary.org
   (26 of 88 tests, refusals persisting for minutes) because each fixture
   starts with empty appdata and re-fetches from scratch. That is why the
@@ -224,6 +231,9 @@ number that is wrong is worse than no number, because it gets trusted.
   `network.txt` is read twice, split by blame: `--discovered-only` in the
   blocking `Network tests discovered` job, `--passed-only` in the
   non-blocking network leg — only the first question is ours to answer.
+  `api-contract.txt` adds `--only`, which fails if anything *outside* the
+  list ran — the guard that keeps that job's `--filter` from being widened
+  into 94 tests pointed at OpenLibrary.
   The pre-commit hook checks the same wiring statically
   (`scripts/check_required_tests_wired.py`).
   When a bug ships, add its regression test there.

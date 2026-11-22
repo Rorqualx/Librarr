@@ -7,7 +7,8 @@ rename a fixture or mark it [Ignore], and the step stays green while the
 test it was there for quietly stops existing. This reads the result file
 afterwards and checks the tests that matter are actually in it.
 
-Usage: assert_tests_ran.py [--discovered-only|--passed-only] RESULTS_XML REQUIRED_LIST
+Usage: assert_tests_ran.py [--discovered-only|--passed-only] [--only]
+                           RESULTS_XML REQUIRED_LIST
 
 REQUIRED_LIST has one entry per line; blank lines and `#` comments are
 ignored. An entry is a test's full name, or a prefix of it -- a fixture or
@@ -33,6 +34,14 @@ reach a third party needs them judged separately:
 
 With neither flag both clauses are checked, which is what a suite that
 touches nothing external should do.
+
+    --only              additionally, NOTHING outside the list may have run.
+
+That last one is for a step whose --filter is the only thing keeping an
+expensive or antisocial suite out of the pipeline. The checks above all ask
+whether too little ran; this asks whether too much did, so that widening the
+filter fails the step instead of quietly costing a few hundred requests to
+someone else's server.
 """
 
 import sys
@@ -94,6 +103,18 @@ def collected(results_xml, required):
     return sum(1 for name in names for entry, _ in required if matches(entry, name))
 
 
+def unexpected(results_xml, required):
+    """Test-cases in the result file that no entry in the list accounts for.
+
+    Only meaningful for a step whose filter is supposed to select exactly
+    this list. Everywhere else the result file legitimately holds thousands
+    of other tests, which is why this is behind --only.
+    """
+    names = [c.get("fullname", "") for c in ET.fromstring(results_xml).iter("test-case")]
+
+    return sorted({n for n in names if not any(matches(entry, n) for entry, _ in required)})
+
+
 def check(results_xml, required, discovered=True, passed=True):
     root = ET.fromstring(results_xml)
     cases = [(c.get("fullname", ""), c.get("result", ""), c.get("label", "")) for c in root.iter("test-case")]
@@ -118,6 +139,7 @@ def check(results_xml, required, discovered=True, passed=True):
 def main(argv):
     args = argv[1:]
     discovered = passed = True
+    only = False
 
     while args and args[0].startswith("--"):
         flag = args.pop(0)
@@ -126,6 +148,8 @@ def main(argv):
             passed = False
         elif flag == "--passed-only":
             discovered = False
+        elif flag == "--only":
+            only = True
         else:
             sys.stderr.write("unknown option: {0}\n\n".format(flag))
             sys.stderr.write(__doc__)
@@ -152,6 +176,7 @@ def main(argv):
         required = parse_required(f.read())
 
     problems = check(results_xml, required, discovered, passed)
+    strays = unexpected(results_xml, required) if only else []
 
     if problems:
         print("::error::Required tests from {0} {1}:".format(required_path, failed))
@@ -159,11 +184,23 @@ def main(argv):
         for problem in problems:
             print("  " + problem)
 
+    if strays:
+        print("::error::{0} test case(s) ran that {1} does not list, so whatever "
+              "selects the tests is wider than the list:".format(len(strays), required_path))
+
+        for stray in strays[:10]:
+            print("  " + stray)
+
+        if len(strays) > 10:
+            print("  ... and {0} more".format(len(strays) - 10))
+
+    if problems or strays:
         return 1
 
-    print("{0}: {1} required entr{2} {3} ({4} test case(s)).".format(
+    print("{0}: {1} required entr{2} {3} ({4} test case(s)){5}.".format(
         required_path, len(required), "y" if len(required) == 1 else "ies",
-        proved, collected(results_xml, required)))
+        proved, collected(results_xml, required),
+        ", and nothing else ran" if only else ""))
 
     return 0
 

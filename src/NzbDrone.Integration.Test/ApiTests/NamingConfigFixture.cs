@@ -32,7 +32,12 @@ namespace NzbDrone.Integration.Test.ApiTests
             result.StandardBookFormat.Should().Be(config.StandardBookFormat);
         }
 
+        // ApiContract: asserts a 4xx, and needs no third party to do it.
+        // The push pipeline runs exactly the tests carrying this category
+        // (build.yml, "API 4xx contract tests"). Do not put it on a test
+        // that reaches OpenLibrary -- see _AssemblyGate.
         [Test]
+        [Category("ApiContract")]
         public void should_get_bad_request_if_standard_format_is_empty()
         {
             var config = NamingConfig.GetSingle();
@@ -44,6 +49,7 @@ namespace NzbDrone.Integration.Test.ApiTests
         }
 
         [Test]
+        [Category("ApiContract")]
         public void should_get_bad_request_if_standard_format_doesnt_contain_track_number_and_title()
         {
             var config = NamingConfig.GetSingle();
@@ -55,6 +61,7 @@ namespace NzbDrone.Integration.Test.ApiTests
         }
 
         [Test]
+        [Category("ApiContract")]
         public void should_not_require_format_when_rename_tracks_is_false()
         {
             var config = NamingConfig.GetSingle();
@@ -66,6 +73,7 @@ namespace NzbDrone.Integration.Test.ApiTests
         }
 
         [Test]
+        [Category("ApiContract")]
         public void should_require_format_when_rename_tracks_is_true()
         {
             var config = NamingConfig.GetSingle();
@@ -77,6 +85,7 @@ namespace NzbDrone.Integration.Test.ApiTests
         }
 
         [Test]
+        [Category("ApiContract")]
         public void should_get_bad_request_if_author_folder_format_does_not_contain_author_name()
         {
             var config = NamingConfig.GetSingle();
