@@ -832,6 +832,12 @@ jobs:
             --logger "nunit;LogFilePath=$PWD/ApiContractResult.xml"
           status=$?
           elapsed=$(( SECONDS - start ))
+          # To stdout as well as the summary, and in a fixed, greppable shape.
+          # The summary is the readable half but has no API, so collecting a
+          # month of these to decide on blocking (#137) would otherwise mean
+          # opening a hundred runs by hand:
+          #   gh run view <id> --log | grep API_4XX_WALL_CLOCK_SECONDS
+          echo "API_4XX_WALL_CLOCK_SECONDS=${elapsed}"
           {
             echo "### API 4xx contract tests"
             echo
