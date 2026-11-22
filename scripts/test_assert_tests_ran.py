@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from assert_tests_ran import check, collected, main, parse_required  # noqa: E402
+from assert_tests_ran import check, collected, main, parse_required, unexpected  # noqa: E402
 
 
 def results(*cases):
@@ -151,6 +151,38 @@ class ClauseTests(unittest.TestCase):
         self.assertEqual(len(check(self.SKIPPED, [(FIXTURE, 1)])), 1)
 
 
+class OnlyTests(unittest.TestCase):
+    """--only asks the opposite question: did anything run that should not?
+
+    It guards a step whose --filter is the only thing keeping the rest of an
+    expensive suite out of the pipeline. Every other clause here fails when
+    too little ran; widening a filter makes too much run, and nothing else
+    would notice.
+    """
+
+    def test_says_nothing_when_every_case_is_accounted_for(self):
+        xml = results((FIXTURE + ".a", "Passed", None), (FIXTURE + '.b("x")', "Passed", None))
+
+        self.assertEqual(unexpected(xml, [(FIXTURE, 2)]), [])
+
+    def test_names_a_case_no_entry_covers(self):
+        xml = results((FIXTURE + ".a", "Passed", None), ("Other.Fixture.c", "Passed", None))
+
+        self.assertEqual(unexpected(xml, [(FIXTURE, 1)]), ["Other.Fixture.c"])
+
+    def test_reports_each_stray_once_in_order(self):
+        xml = results(("B.b", "Passed", None), ("A.a", "Passed", None), ("B.b", "Passed", None))
+
+        self.assertEqual(unexpected(xml, [(FIXTURE, 1)]), ["A.a", "B.b"])
+
+    def test_a_stray_that_failed_is_still_only_a_stray(self):
+        # Reported by this clause, not smuggled in as a required-test failure.
+        xml = results(("Other.Fixture.c", "Failed", None))
+
+        self.assertEqual(unexpected(xml, [(FIXTURE, 1)]), ["Other.Fixture.c"])
+        self.assertEqual([p for p in check(xml, [(FIXTURE, 1)]) if "Other" in p], [])
+
+
 class MainTests(unittest.TestCase):
     def run_main(self, xml, *flags):
         with tempfile.TemporaryDirectory() as folder:
@@ -225,6 +257,38 @@ class MainTests(unittest.TestCase):
             "(2 test case(s))",
             self.output(results((FIXTURE + ".a", "Passed", None),
                                 (FIXTURE + ".b", "Passed", None))))
+
+    def test_only_fails_when_something_outside_the_list_ran(self):
+        # The filter was widened, or the category landed on another test.
+        xml = results((FIXTURE + ".a", "Passed", None), ("Other.Fixture.c", "Passed", None))
+
+        self.assertEqual(self.run_main(xml), 0)
+        self.assertEqual(self.run_main(xml, "--only"), 1)
+
+    def test_only_names_the_strays_rather_than_just_counting_them(self):
+        xml = results((FIXTURE + ".a", "Passed", None), ("Other.Fixture.c", "Passed", None))
+
+        self.assertIn("Other.Fixture.c", self.output(xml, "--only"))
+
+    def test_only_says_so_on_a_green_run(self):
+        # Otherwise a step that lost the flag looks identical to one that
+        # still has it.
+        xml = results((FIXTURE + ".a", "Passed", None))
+
+        self.assertIn("nothing else ran", self.output(xml, "--only"))
+        self.assertNotIn("nothing else ran", self.output(xml))
+
+    def test_only_combines_with_a_clause_rather_than_replacing_it(self):
+        # --discovered-only --only: did the six run, and only the six --
+        # without judging outcomes. Both halves still have to bite.
+        self.assertEqual(
+            self.run_main(results((FIXTURE + ".a", "Inconclusive", "Inconclusive")),
+                          "--discovered-only", "--only"),
+            0)
+        self.assertEqual(
+            self.run_main(results(("Other.Fixture.c", "Passed", None)),
+                          "--discovered-only", "--only"),
+            1)
 
     def test_an_unknown_option_is_an_argument_error(self):
         self.assertEqual(self.run_main(results(), "--discovered"), 2)

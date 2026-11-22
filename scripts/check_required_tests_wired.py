@@ -9,6 +9,7 @@ well under a second:
   - a required test's fixture or method no longer exists (renamed, deleted)
   - it, or its fixture, is marked [Ignore] or [Explicit]
   - it carries a category its CI step filters out
+  - it lost the category its CI step selects it BY
   - the CI step no longer un-gates the suite or no longer runs the check
   - the blocking half of a check split by blame stopped blocking
   - a list exists that no CI step reads
@@ -38,6 +39,12 @@ DISABLED_ATTRIBUTE = re.compile(r"\[\s*(Ignore|Explicit)\b")
 # "were the 54 collected at all", as opposed to "did they pass", which is
 # allowed to go red when someone else's host does. build.yml says why.
 DISCOVERY_JOB = "network-discovered"
+
+# The step that runs the six 4xx tests on every push, and the --filter that
+# is the only thing keeping the other 88 tests of that suite -- the ones that
+# hammer openlibrary.org -- out of the push pipeline. See _AssemblyGate.
+API_CONTRACT_STEP = "Run the 4xx contract tests"
+API_CONTRACT_CATEGORY = "ApiContract"
 
 
 def jobs_section(workflow):
@@ -142,20 +149,52 @@ def network_suite(workflow):
     return excluded, problems
 
 
+def api_contract_suite(workflow):
+    step = step_block(workflow, API_CONTRACT_STEP)
+
+    if step is None:
+        return set(), ["build.yml: the '{0}' step is gone".format(API_CONTRACT_STEP)]
+
+    problems = []
+
+    if "READARR_RUN_INTEGRATION: '1'" not in step:
+        problems.append("build.yml: the '{0}' step no longer sets READARR_RUN_INTEGRATION: '1', so _AssemblyGate ignores every test in it".format(API_CONTRACT_STEP))
+
+    # The dangerous direction. Without the filter, READARR_RUN_INTEGRATION=1
+    # turns all 94 tests loose on openlibrary.org on every push -- which is
+    # the thing _AssemblyGate exists to prevent, and the one way landing this
+    # job could have weakened it.
+    if "TestCategory=" + API_CONTRACT_CATEGORY not in step:
+        problems.append("build.yml: the '{0}' step no longer filters to TestCategory={1}, so READARR_RUN_INTEGRATION=1 would run the whole integration suite against live OpenLibrary on every push".format(API_CONTRACT_STEP, API_CONTRACT_CATEGORY))
+
+    if "LogFilePath=$PWD/ApiContractResult.xml" not in step:
+        problems.append("build.yml: the '{0}' step no longer writes ApiContractResult.xml, so the check below reads nothing".format(API_CONTRACT_STEP))
+
+    return excluded_categories(step), problems
+
+
 # Each list, the CI step that must run its tests, and the arguments every
 # assert_tests_ran.py invocation that reads it must still be called with. A
 # list missing here is an error, so a new list cannot be added without
 # saying where it runs.
+# saying where it runs. The third element is the category its step SELECTS
+# the tests by, where the step uses one -- losing that attribute drops a test
+# from CI as completely as deleting it, and leaves the entry looking healthy.
 SUITES = {
-    "unit.txt": (unit_suite, ["TestResult.xml .github/required-tests/unit.txt"]),
-    "playwright.txt": (playwright_suite, ["PlaywrightResult.xml .github/required-tests/playwright.txt"]),
+    "unit.txt": (unit_suite, ["TestResult.xml .github/required-tests/unit.txt"], None),
+    "playwright.txt": (playwright_suite, ["PlaywrightResult.xml .github/required-tests/playwright.txt"], None),
     # Two, because this check is split by blame: the discovered half blocks
     # in its own job, the passed half only reports. Losing either one is a
     # silent hole, so both are named here.
     "network.txt": (network_suite, [
         "--discovered-only TestResult.xml .github/required-tests/network.txt",
         "--passed-only TestResult.xml .github/required-tests/network.txt",
-    ]),
+    ], None),
+    # --only is not optional decoration: it is the runtime half of keeping
+    # the other 88 tests of that suite off the push pipeline.
+    "api-contract.txt": (api_contract_suite, [
+        "--only ApiContractResult.xml .github/required-tests/api-contract.txt",
+    ], API_CONTRACT_CATEGORY),
 }
 
 
@@ -255,7 +294,7 @@ def find_test(sources, entry):
     return None
 
 
-def check_entry(sources, entry, minimum, excluded, list_name):
+def check_entry(sources, entry, minimum, excluded, list_name, selected_by=None):
     found = find_test(sources, entry)
     where = "{0}: {1}".format(list_name, entry)
 
@@ -275,6 +314,9 @@ def check_entry(sources, entry, minimum, excluded, list_name):
         problems.append("{0}: the fixture's category {1} is filtered out of its CI step".format(where, ", ".join(sorted(blocked))))
 
     if method is None:
+        if selected_by and selected_by not in categories(class_attributes):
+            problems.append('{0}: the fixture in {1} has no [Category("{2}")], so its CI step\'s filter no longer selects it'.format(where, path, selected_by))
+
         count = len(TEST_ATTRIBUTE.findall(body))
 
         if count < minimum:
@@ -300,6 +342,9 @@ def check_entry(sources, entry, minimum, excluded, list_name):
     if blocked:
         problems.append("{0}: category {1} is filtered out of its CI step".format(where, ", ".join(sorted(blocked))))
 
+    if selected_by and selected_by not in categories(method_attributes) | categories(class_attributes):
+        problems.append('{0}: no [Category("{1}")] on {2} or its fixture, so its CI step\'s filter no longer selects it'.format(where, selected_by, method))
+
     return problems
 
 
@@ -316,7 +361,7 @@ def main():
             problems.append("{0}: no CI step is configured for this list in scripts/check_required_tests_wired.py".format(list_name))
             continue
 
-        suite, invocations = SUITES[list_name]
+        suite, invocations, selected_by = SUITES[list_name]
         excluded, suite_problems = suite(workflow)
         problems.extend(suite_problems)
 
@@ -333,7 +378,7 @@ def main():
             problems.append("{0}: the list is empty".format(list_name))
 
         for entry, minimum in required:
-            problems.extend(check_entry(sources, entry, minimum, excluded, list_name))
+            problems.extend(check_entry(sources, entry, minimum, excluded, list_name, selected_by))
 
     for name in SUITES:
         if name not in lists:

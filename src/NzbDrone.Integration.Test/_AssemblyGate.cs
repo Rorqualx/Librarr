@@ -19,6 +19,18 @@ namespace NzbDrone.Integration.Test
     // tests need the network and a couple of minutes, so they should not run
     // on a bare `dotnet test`. Opt in with READARR_RUN_INTEGRATION=1.
     //
+    // ONE CI JOB OPTS IN, FOR SIX TESTS. build.yml's "API 4xx contract
+    // tests" sets READARR_RUN_INTEGRATION=1 and then filters to
+    // TestCategory=ApiContract: the six tests here that assert a 4xx and
+    // reach no third party doing it. That is the gate working as designed,
+    // not a hole in it -- what keeps the other 88 out is the filter, so the
+    // filter is the load-bearing part. Removing it would point all 94 at
+    // openlibrary.org on every push, which is the exact thing the paragraph
+    // below describes going wrong. check_required_tests_wired.py fails the
+    // commit if the filter disappears, and assert_tests_ran.py --only fails
+    // the job if anything outside the list runs anyway. Do not add
+    // [Category("ApiContract")] to a test that touches OpenLibrary.
+    //
     // RUN ONE FIXTURE AT A TIME. Every fixture starts with an empty appdata,
     // so no OpenLibrary cache carries over and each one re-fetches the author
     // and its works from scratch. Running the whole ApiTests namespace in a
