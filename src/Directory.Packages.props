@@ -8,7 +8,7 @@
     <PackageVersion Include="coverlet.collector" Version="10.1.0" PrivateAssets="all" />
     <PackageVersion Include="Dapper" Version="2.1.89" />
     <PackageVersion Include="Diacritical.Net" Version="1.0.5" />
-    <PackageVersion Include="DryIoc.dll" Version="5.4.3" />
+    <PackageVersion Include="DryIoc.dll" Version="6.0.0" />
     <PackageVersion Include="DryIoc.Microsoft.DependencyInjection" Version="6.2.0" />
     <PackageVersion Include="Equ" Version="2.3.0" />
     <PackageVersion Include="FluentAssertions" Version="7.2.2" />
